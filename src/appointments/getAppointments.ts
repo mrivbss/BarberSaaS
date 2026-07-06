@@ -1,42 +1,63 @@
 import { supabase } from '../config/supabaseClient';
-import { UserSession } from '../services/login';
 
-export interface Cita {
-  id: string;
+export interface CitaInput {
   cliente: string;
   fecha: string;
   hora: string;
   barbero_id: string;
   barberia_id: string;
+  servicio_id: number;
 }
 
-/**
- * Función 3: Consulta Filtrada (Row Isolation)
- * 
- * Recupera las citas de la base de datos aplicando un filtro estricto
- * de multi-tenancy usando el 'barberia_id' del usuario logueado.
- */
-export async function getAppointments(session: UserSession): Promise<Cita[]> {
-  try {
-    // 1. Consultar base de datos aislando las filas (Row Isolation)
+export const appointmentServices = {
+  // Listar citas con sus servicios vinculados
+  async getAll() {
     const { data, error } = await supabase
       .from('citas')
-      .select('*')
-      // FILTRO MULTI-TENANT: Esta es la pieza fundamental del aislamiento en el frontend.
-      // Jamás se traerán datos de otras barberías.
-      .eq('barberia_id', session.barberia_id)
+      .select(`
+        *,
+        servicios (
+          nombre,
+          precio
+        )
+      `)
       .order('fecha', { ascending: true })
       .order('hora', { ascending: true });
 
     if (error) throw error;
+    return data || [];
+  },
 
-    console.log(`Se recuperaron ${data.length} citas de la barbería ${session.barberia_id}`);
-    
-    // 2. Retornar los datos parseados
-    return data as Cita[];
-    
-  } catch (error) {
-    console.error('Error al realizar la consulta filtrada de citas:', error);
-    return [];
+  // Crear cita inicial (por defecto entra como 'pendiente')
+  async create(cita: CitaInput) {
+    const { data, error } = await supabase
+      .from('citas')
+      .insert([{ ...cita, estado: 'pendiente' }])
+      .select();
+
+    if (error) throw error;
+    return data?.[0] || null;
+  },
+
+  async cobrarCita(
+    citaId: string, 
+    datosGanancia: { monto: number; barbero_id: string; barberia_id: string; concepto: string } // 👈 Agregamos el tipo aquí
+  ) {
+    // 1. Actualizar estado de la cita a completada
+    const updateCita = await supabase
+      .from('citas')
+      .update({ estado: 'completada' })
+      .eq('id', citaId);
+
+    if (updateCita.error) throw updateCita.error;
+
+    // 2. Registrar el movimiento en ganancias con su concepto real
+    const insertGanancia = await supabase
+      .from('ganancias')
+      .insert([datosGanancia]);
+
+    if (insertGanancia.error) throw insertGanancia.error;
+
+    return true;
   }
-}
+};
