@@ -13,8 +13,7 @@ export function App() {
   const session = localStorage.getItem('tenant_session');
 
   return (
-    <div className="app-container">
-      <Routes>
+    <Routes>
         <Route path="/login" element={<Login />} />
         
         {/* Dashboard Layout with Nested Routes */}
@@ -27,7 +26,6 @@ export function App() {
         </Route>
         
         <Route path="*" element={<Navigate to={session ? "/dashboard" : "/login"} replace />} />
-      </Routes>
-    </div>
+    </Routes>
   );
 }
