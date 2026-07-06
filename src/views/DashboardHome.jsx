@@ -18,63 +18,52 @@ import {
   EmptyState,
 } from '../components/ui';
 
-export function DashboardHome() {
+export function DashboardHome({ usuario }) {
   const [stats, setStats] = useState({ citasHoy: 0, ingresosHoy: 0 });
   const [appointments, setAppointments] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
-  const [session, setSession] = useState(null);
 
   useEffect(() => {
-    const storedSession = localStorage.getItem('tenant_session');
-    if (storedSession) {
-      const parsedSession = JSON.parse(storedSession);
-      setSession(parsedSession);
+    // Si no tenemos barberia_id, no hacemos nada
+    if (!usuario?.barberia_id) return;
 
-      const loadData = async () => {
-        setLoadingData(true);
-        try {
-          const fetchedStats = await getDashboardStats(parsedSession.barberia_id);
-          const fetchedAppointments = await getUpcomingAppointments(parsedSession.barberia_id);
+    const loadData = async () => {
+      setLoadingData(true);
+      try {
+        const fetchedStats = await getDashboardStats(usuario.barberia_id);
+        const fetchedAppointments = await getUpcomingAppointments(usuario.barberia_id);
 
-          setStats(fetchedStats);
-          setAppointments(fetchedAppointments);
-        } catch (error) {
-          console.error('Error loading dashboard data:', error);
-        } finally {
-          setLoadingData(false);
-        }
-      };
+        setStats(fetchedStats || { citasHoy: 0, ingresosHoy: 0 });
+        setAppointments(fetchedAppointments || []);
+      } catch (error) {
+        console.error('Error cargando datos del dashboard:', error);
+      } finally {
+        setLoadingData(false);
+      }
+    };
 
-      loadData();
-    }
-  }, []);
+    loadData();
+  }, [usuario]);
 
-  if (!session) return null;
+  // Si está cargando, mostramos un pequeño mensaje o spinner
+  if (loadingData && stats.ingresosHoy === 0) {
+    return <div className="p-10 text-white">Cargando estadísticas...</div>;
+  }
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in p-6">
       <PageHeader
         title="Resumen General"
-        subtitle={`Bienvenido de vuelta, ${session.email} (${session.rol})`}
-        badge={<TenantBadge tenantId={session.barberia_id} />}
+        subtitle={`Bienvenido, ${usuario?.email}`}
+        badge={<TenantBadge tenantId={usuario?.barberia_id} />}
       />
 
       {/* KPI Grid */}
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 animate-slide-up">
-        <StatCard
-          icon={Calendar}
-          value={stats.citasHoy}
-          label="Citas para hoy"
-          loading={loadingData}
-        />
-        <StatCard
-          icon={DollarSign}
-          value={`$${stats.ingresosHoy.toLocaleString('es-CL')}`}
-          label="Ingresos del Día"
-          loading={loadingData}
-        />
-        <StatCard icon={Star} value="4.8" label="Calificación Promedio (Demo)" />
-        <StatCard icon={TrendingUp} value="+15%" label="Crecimiento Semanal (Demo)" />
+        <StatCard icon={Calendar} value={stats.citasHoy} label="Citas hoy" />
+        <StatCard icon={DollarSign} value={`$${(stats.ingresosHoy || 0).toLocaleString('es-CL')}`} label="Ingresos del Día" />
+        <StatCard icon={Star} value="4.8" label="Calificación" />
+        <StatCard icon={TrendingUp} value="+15%" label="Crecimiento" />
       </div>
 
       {/* Upcoming Appointments */}
@@ -82,41 +71,27 @@ export function DashboardHome() {
         <SectionTitle className="mb-5">Próximas Citas</SectionTitle>
         <Table>
           <TableHeader>
-            <TableRow className="hover:bg-transparent border-b border-border">
+            <TableRow>
               <TableHead>Cliente</TableHead>
-              <TableHead>Barbero</TableHead>
               <TableHead>Hora</TableHead>
               <TableHead>Estado</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loadingData ? (
-              <TableSkeleton rows={3} cols={4} />
-            ) : appointments.length === 0 ? (
-              <tr>
-                <td colSpan={4}>
-                  <EmptyState
-                    icon={Calendar}
-                    title="No hay próximas citas"
-                    description="Las citas programadas aparecerán aquí."
-                  />
-                </td>
-              </tr>
-            ) : (
+            {appointments.length > 0 ? (
               appointments.map((appt) => (
                 <TableRow key={appt.id}>
-                  <TableCell className="font-medium">{appt.cliente}</TableCell>
-                  <TableCell className="text-muted">
-                    {appt.usuarios?.email || 'N/A'}
-                  </TableCell>
-                  <TableCell className="text-muted font-mono text-xs">
-                    {appt.hora.substring(0, 5)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="muted">Pendiente</Badge>
-                  </TableCell>
+                  <TableCell>{appt.cliente || 'Sin nombre'}</TableCell>
+                  <TableCell>{appt.hora?.substring(0, 5)}</TableCell>
+                  <TableCell><Badge variant="muted">Pendiente</Badge></TableCell>
                 </TableRow>
               ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={3}>
+                  <EmptyState title="No hay citas" description="Las citas aparecerán aquí." />
+                </TableCell>
+              </TableRow>
             )}
           </TableBody>
         </Table>

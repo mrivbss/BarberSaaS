@@ -1,32 +1,36 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { DashboardHome } from './views/DashboardHome';
 import { Login } from './views/Login'; 
 import { Agenda } from './views/Agenda';
 import { Servicios } from './views/Servicios';
 import { Finanzas } from './views/Finanzas';
 import { Clientes } from './views/Clientes';
 import { Dashboard } from './views/Dashboard';
-// ... los demás imports ...
 
-// 💡 Agrega esta línea mágica aquí abajo para desactivar el rastreo de TS en este componente:
 const DashboardComponent = Dashboard as any;
 
-// 💡 Definimos la estructura que tiene tu usuario en Supabase
 interface Usuario {
   id: string;
   email: string;
   barberia_id?: string;
+  rol?: string;
 }
 
 export function App() {
-  // 🔒 Indicamos que el estado puede ser de tipo Usuario o null
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const usuarioGuardado = localStorage.getItem('barber_user');
-    if (usuarioGuardado) {
-      setUsuario(JSON.parse(usuarioGuardado));
+    // Intentamos recuperar la sesión
+    const sesionGuardada = localStorage.getItem('tenant_session');
+    if (sesionGuardada) {
+      try {
+        setUsuario(JSON.parse(sesionGuardada));
+      } catch (e) {
+        console.error("Error al leer sesión:", e);
+        localStorage.removeItem('tenant_session');
+      }
     }
     setLoading(false);
   }, []);
@@ -41,25 +45,26 @@ export function App() {
 
   return (
     <Routes>
-      {/* Ruta Pública: Login */}
+      {/* Login: Si ya hay usuario, lo mandamos al dashboard */}
       <Route 
         path="/login" 
-        element={!usuario ? <Login onLoginSuccess={(user: Usuario) => setUsuario(user)} /> : <Navigate to="/dashboard/agenda" />} 
+        element={!usuario ? <Login onLoginSuccess={setUsuario} /> : <Navigate to="/dashboard" />} 
       />
 
-      {/* Rutas Privadas */}
+      {/* Dashboard y sus hijos */}
       <Route 
         path="/dashboard" 
         element={usuario ? <DashboardComponent usuario={usuario} setUsuario={setUsuario} /> : <Navigate to="/login" />}
       >
+        <Route index element={<DashboardHome usuario={usuario} />} />
         <Route path="agenda" element={<Agenda />} />
         <Route path="servicios" element={<Servicios />} />
         <Route path="finanzas" element={<Finanzas />} />
         <Route path="clientes" element={<Clientes />} />
       </Route>
 
-      {/* Redirección por defecto */}
-      <Route path="*" element={<Navigate to={usuario ? "/dashboard/agenda" : "/login"} />} />
+      {/* Ruta por defecto: Redirige según si hay sesión o no */}
+      <Route path="*" element={<Navigate to={usuario ? "/dashboard" : "/login"} />} />
     </Routes>
   );
 }
