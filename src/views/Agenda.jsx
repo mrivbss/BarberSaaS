@@ -73,6 +73,12 @@ export function Agenda() {
     }
 
     const sesion = JSON.parse(localStorage.getItem('tenant_session') || '{}');
+    await appointmentServices.cobrarCita(cita.id, {
+      monto: precioServicio,
+      barbero_id: cita.barbero_id || sesion?.id,
+      barberia_id: cita.barberia_id || sesion?.barberia_id,
+      concepto: `Cita: ${nombreServicio} - ${cita.cliente}`
+    });
     const barberoId = sesion?.barbero_id || sesion?.id; 
     const barberiaId = sesion?.barberia_id;
 
