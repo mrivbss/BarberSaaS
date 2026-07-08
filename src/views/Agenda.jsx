@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 import { appointmentServices } from '../appointments/getAppointments';
 import { barberServices } from '../services/services';
 import { PageTransition } from '../components/layout/PageTransition';
@@ -148,6 +148,25 @@ export function Agenda() {
     }
   };
 
+  const handleEliminar = async (cita) => {
+    const confirmar = window.confirm('¿Estás seguro de eliminar esta cita?');
+    if (!confirmar) return;
+
+    try {
+      setActionLoading(`delete-${cita.id}`);
+      const sesion = JSON.parse(localStorage.getItem('tenant_session') || '{}');
+      
+      await appointmentServices.deleteCita(cita.id, sesion.barberia_id);
+      
+      setCitas(prev => prev.filter(c => c.id !== cita.id));
+    } catch (error) {
+      console.error("Error al eliminar la cita:", error);
+      alert("Falló la eliminación de la cita.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   return (
     <PageTransition className="p-8 lg:p-10 max-w-6xl">
       <PageHeader
@@ -232,18 +251,33 @@ export function Agenda() {
                       <p className="text-[12px] text-muted-foreground mt-0.5">{c.hora.slice(0, 5)}</p>
                     </TableCell>
                     <TableCell className="text-right">
-                      {c.estado === 'completada' ? (
-                        <Badge variant="success">Cobrada</Badge>
-                      ) : (
+                      <div className="flex items-center justify-end gap-2">
+                        {c.estado === 'completada' ? (
+                          <Badge variant="success">Cobrada</Badge>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handleCobrar(c)}
+                            disabled={actionLoading === c.id || actionLoading === `delete-${c.id}`}
+                          >
+                            {actionLoading === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Cobrar'}
+                          </Button>
+                        )}
                         <Button
                           size="sm"
-                          variant="secondary"
-                          onClick={() => handleCobrar(c)}
-                          disabled={actionLoading === c.id}
+                          variant="ghost"
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive px-2"
+                          onClick={() => handleEliminar(c)}
+                          disabled={actionLoading === c.id || actionLoading === `delete-${c.id}`}
                         >
-                          {actionLoading === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Cobrar'}
+                          {actionLoading === `delete-${c.id}` ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
                         </Button>
-                      )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

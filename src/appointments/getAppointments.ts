@@ -59,5 +59,16 @@ export const appointmentServices = {
     if (insertGanancia.error) throw insertGanancia.error;
 
     return true;
+  },
+
+  async deleteCita(citaId: string, barberiaId: string) {
+    const { error } = await supabase
+      .from('citas')
+      .delete()
+      .eq('id', citaId)
+      .eq('barberia_id', barberiaId);
+
+    if (error) throw error;
+    return true;
   }
 };
