@@ -128,14 +128,17 @@ export function Agenda() {
     try {
       setActionLoading(cita.id);
       
+      // ... dentro de handleCobrar, antes del await
+      const sesion = JSON.parse(localStorage.getItem('tenant_session') || '{}');
+
       await appointmentServices.cobrarCita(cita.id, {
         monto: precioServicio,
-        barbero_id: cita.barbero_id,
-        barberia_id: cita.barberia_id,
+        barbero_id: cita.barbero_id || sesion?.id,
+        barberia_id: cita.barberia_id || sesion?.barberia_id,
         concepto: `Cita: ${nombreServicio} - ${cita.cliente}`
       });
       
-      const actualizada = await appointmentServices.getAll();
+      const actualizada = await appointmentServices.getAll(sesion.barberia_id);
       setCitas(actualizada);
     } catch (error) {
       console.error("Error en flujo de cobro:", error);
