@@ -91,10 +91,10 @@ export function Agenda() {
         hora: hora.includes(':') && hora.split(':').length === 2 ? `${hora}:00` : hora,
         barbero_id: barberoId,
         barberia_id: barberiaId,
-        servicio_id: parseInt(servicioId, 10)
+        servicio_id: servicioId
       });
 
-      const actualizada = await appointmentServices.getAll();
+      const actualizada = await appointmentServices.getAll(sesion.barberia_id);
       setCitas(actualizada);
 
       setCliente('');
