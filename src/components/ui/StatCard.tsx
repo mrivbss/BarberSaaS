@@ -14,21 +14,18 @@ interface StatCardProps {
 
 export function StatCard({ icon: Icon, value, label, loading = false, className }: StatCardProps) {
   return (
-    <Card hover className={cn('flex items-center gap-5', className)}>
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] border border-border-subtle">
-        <Icon className="h-5 w-5 text-muted" strokeWidth={1.75} />
+    <Card hover padding="md" className={cn('flex flex-col gap-5', className)}>
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-semibold tracking-wider uppercase text-muted-foreground">{label}</p>
+        <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-foreground/[0.04]">
+          <Icon className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+        </div>
       </div>
-      <div className="min-w-0 flex-1">
+      <div>
         {loading ? (
-          <>
-            <Skeleton className="mb-2 h-7 w-20" />
-            <Skeleton className="h-4 w-28" />
-          </>
+          <Skeleton className="h-9 w-28" />
         ) : (
-          <>
-            <p className="text-2xl font-semibold tracking-tight text-foreground">{value}</p>
-            <p className="mt-0.5 text-sm text-muted">{label}</p>
-          </>
+          <p className="font-serif text-3xl tracking-tight text-foreground tabular-nums">{value}</p>
         )}
       </div>
     </Card>

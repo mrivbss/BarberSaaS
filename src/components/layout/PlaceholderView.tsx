@@ -7,19 +7,17 @@ interface PlaceholderViewProps {
   message: string;
 }
 
-export function PlaceholderView({ title, subtitle, icon, message }: PlaceholderViewProps) {
+import { PageHeader } from '../ui/PageHeader';
+import { EmptyState } from '../ui/EmptyState';
+import { PageTransition } from '../layout/PageTransition';
+
+export function PlaceholderView({ title, subtitle, message }: PlaceholderViewProps) {
   return (
-    <div className="animate-fade-in">
-      <header className="mb-8 animate-slide-up">
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground">{title}</h1>
-        <p className="mt-1.5 text-sm text-muted">{subtitle}</p>
-      </header>
-      <div className="rounded-lg border border-border bg-card p-12 text-center transition-all duration-150 hover:border-border/80">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-white/[0.04] border border-border-subtle">
-          {icon}
-        </div>
-        <p className="text-sm text-muted">{message}</p>
+    <PageTransition className="p-8 lg:p-16 xl:p-24 max-w-7xl mx-auto">
+      <PageHeader title={title} subtitle={subtitle} />
+      <div className="mt-24">
+        <EmptyState title={message} />
       </div>
-    </div>
+    </PageTransition>
   );
 }

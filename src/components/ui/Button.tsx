@@ -12,40 +12,30 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    'bg-foreground text-background hover:bg-foreground/90 active:scale-[0.98]',
+    'bg-foreground text-background shadow-premium hover:shadow-premium-hover hover:bg-foreground/90',
   secondary:
-    'bg-transparent border border-border text-foreground hover:bg-white/[0.04] active:scale-[0.98]',
+    'bg-surface shadow-input hover:shadow-premium border border-border text-foreground hover:bg-black/[0.02]',
   ghost:
-    'bg-transparent text-muted hover:text-foreground hover:bg-white/[0.04]',
+    'bg-transparent text-muted-foreground hover:text-foreground hover:bg-black/[0.04]',
   danger:
-    'bg-transparent border border-red-500/30 text-red-400 hover:bg-red-500/10',
+    'bg-transparent border border-destructive/30 text-destructive hover:bg-destructive/10',
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-sm',
-  md: 'px-4 py-2.5 text-sm',
-  lg: 'px-5 py-3 text-base',
+  sm: 'px-4 py-2 text-xs font-semibold',
+  md: 'px-6 py-2.5 text-sm font-semibold',
+  lg: 'px-8 py-3.5 text-sm font-semibold',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  (
-    {
-      className,
-      variant = 'primary',
-      size = 'md',
-      fullWidth = false,
-      disabled,
-      children,
-      ...props
-    },
-    ref
-  ) => (
+  ({ className, variant = 'primary', size = 'md', fullWidth = false, disabled, children, ...props }, ref) => (
     <button
       ref={ref}
       disabled={disabled}
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-lg font-medium',
-        'transition-all duration-150 ease-out',
+        'inline-flex items-center justify-center gap-2 rounded-lg',
+        'transition-all duration-300',
+        'active:scale-[0.97]',
         'disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100',
         variantStyles[variant],
         sizeStyles[size],

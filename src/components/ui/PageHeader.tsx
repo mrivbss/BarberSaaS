@@ -14,16 +14,16 @@ export function PageHeader({ title, subtitle, badge, action, className }: PageHe
   return (
     <header
       className={cn(
-        'mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between animate-slide-up',
+        'mb-10 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between',
         className
       )}
     >
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground">{title}</h1>
-        {subtitle && <p className="mt-1.5 text-sm text-muted">{subtitle}</p>}
+      <div className="space-y-1.5">
+        <h1 className="font-serif text-3xl font-normal tracking-tight text-foreground">{title}</h1>
+        {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
       </div>
       {(badge || action) && (
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3 mt-4 sm:mt-0">
           {badge}
           {action}
         </div>
@@ -34,8 +34,8 @@ export function PageHeader({ title, subtitle, badge, action, className }: PageHe
 
 export function TenantBadge({ tenantId }: { tenantId: string }) {
   return (
-    <Badge variant="muted" className="font-mono text-[11px] tracking-wide">
-      Tenant · {tenantId.substring(0, 8)}…
+    <Badge variant="muted" className="font-mono text-[10px]">
+      {tenantId.substring(0, 8)}
     </Badge>
   );
 }

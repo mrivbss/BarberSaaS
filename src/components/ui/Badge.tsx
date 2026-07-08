@@ -8,17 +8,18 @@ interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
-  default: 'bg-white/[0.08] text-foreground',
-  success: 'bg-emerald-500/10 text-emerald-400',
-  warning: 'bg-amber-500/10 text-amber-400',
-  muted: 'bg-white/[0.04] text-muted',
+  default: 'bg-foreground/[0.06] text-foreground',
+  success: 'bg-emerald-50 text-emerald-700 border-emerald-200/60',
+  warning: 'bg-amber-50 text-amber-700 border-amber-200/60',
+  muted: 'bg-black/[0.03] text-muted-foreground',
 };
 
 export function Badge({ className, variant = 'default', children, ...props }: BadgeProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-medium',
+        'inline-flex items-center rounded-full border border-transparent px-2.5 py-0.5 text-[11px] font-semibold leading-none tracking-wide',
+        'transition-colors duration-200',
         variantStyles[variant],
         className
       )}

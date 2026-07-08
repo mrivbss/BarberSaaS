@@ -8,7 +8,7 @@ interface SectionTitleProps extends HTMLAttributes<HTMLHeadingElement> {
 export function SectionTitle({ className, as: Tag = 'h2', children, ...props }: SectionTitleProps) {
   return (
     <Tag
-      className={cn('text-lg font-semibold tracking-tight text-foreground', className)}
+      className={cn('text-sm font-semibold tracking-tight text-foreground', className)}
       {...props}
     >
       {children}

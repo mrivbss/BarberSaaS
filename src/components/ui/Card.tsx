@@ -8,7 +8,7 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 
 const paddingMap = {
   none: '',
-  sm: 'p-4',
+  sm: 'p-5',
   md: 'p-6',
   lg: 'p-8',
 };
@@ -18,8 +18,9 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
     <div
       ref={ref}
       className={cn(
-        'rounded-lg border border-border bg-card',
-        hover && 'transition-all duration-150 hover:border-border/80 hover:bg-card-hover hover:-translate-y-0.5',
+        'rounded-xl border border-border/80 bg-surface shadow-premium',
+        'transition-all duration-300 ease-out',
+        hover && 'hover:shadow-premium-hover hover:-translate-y-[2px] hover:border-border/60',
         paddingMap[padding],
         className
       )}

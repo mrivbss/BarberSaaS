@@ -5,7 +5,7 @@ import { Login } from './views/Login';
 import { Agenda } from './views/Agenda';
 import { Servicios } from './views/Servicios';
 import { Finanzas } from './views/Finanzas';
-import { Clientes } from './views/Clientes';
+
 import { Dashboard } from './views/Dashboard';
 
 const DashboardComponent = Dashboard as any;
@@ -60,7 +60,7 @@ export function App() {
         <Route path="agenda" element={<Agenda />} />
         <Route path="servicios" element={<Servicios />} />
         <Route path="finanzas" element={<Finanzas />} />
-        <Route path="clientes" element={<Clientes />} />
+
       </Route>
 
       {/* Ruta por defecto: Redirige según si hay sesión o no */}

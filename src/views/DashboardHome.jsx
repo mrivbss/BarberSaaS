@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Calendar, DollarSign, Star, TrendingUp } from 'lucide-react';
 import { getDashboardStats, getUpcomingAppointments } from '../services/dashboard';
+import { PageTransition } from '../components/layout/PageTransition';
 import {
   PageHeader,
   TenantBadge,
@@ -24,7 +25,6 @@ export function DashboardHome({ usuario }) {
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
-    // Si no tenemos barberia_id, no hacemos nada
     if (!usuario?.barberia_id) return;
 
     const loadData = async () => {
@@ -45,21 +45,27 @@ export function DashboardHome({ usuario }) {
     loadData();
   }, [usuario]);
 
-  // Si está cargando, mostramos un pequeño mensaje o spinner
   if (loadingData && stats.ingresosHoy === 0) {
-    return <div className="p-10 text-white">Cargando estadísticas...</div>;
+    return (
+      <PageTransition className="flex min-h-[60vh] items-center justify-center p-12">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-foreground/60" />
+          <p className="text-sm text-muted-foreground">Cargando dashboard...</p>
+        </div>
+      </PageTransition>
+    );
   }
 
   return (
-    <div className="animate-fade-in p-6">
+    <PageTransition className="p-8 lg:p-10 max-w-6xl">
       <PageHeader
-        title="Resumen General"
+        title="Dashboard"
         subtitle={`Bienvenido, ${usuario?.email}`}
         badge={<TenantBadge tenantId={usuario?.barberia_id} />}
       />
 
       {/* KPI Grid */}
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 animate-slide-up">
+      <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={Calendar} value={stats.citasHoy} label="Citas hoy" />
         <StatCard icon={DollarSign} value={`$${(stats.ingresosHoy || 0).toLocaleString('es-CL')}`} label="Ingresos del Día" />
         <StatCard icon={Star} value="4.8" label="Calificación" />
@@ -67,8 +73,8 @@ export function DashboardHome({ usuario }) {
       </div>
 
       {/* Upcoming Appointments */}
-      <Card padding="md" className="animate-slide-up">
-        <SectionTitle className="mb-5">Próximas Citas</SectionTitle>
+      <div>
+        <SectionTitle className="mb-4">Próximas Citas</SectionTitle>
         <Table>
           <TableHeader>
             <TableRow>
@@ -81,21 +87,21 @@ export function DashboardHome({ usuario }) {
             {appointments.length > 0 ? (
               appointments.map((appt) => (
                 <TableRow key={appt.id}>
-                  <TableCell>{appt.cliente || 'Sin nombre'}</TableCell>
-                  <TableCell>{appt.hora?.substring(0, 5)}</TableCell>
+                  <TableCell className="font-medium">{appt.cliente || 'Sin nombre'}</TableCell>
+                  <TableCell className="text-muted-foreground">{appt.hora?.substring(0, 5)}</TableCell>
                   <TableCell><Badge variant="muted">Pendiente</Badge></TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
                 <TableCell colSpan={3}>
-                  <EmptyState title="No hay citas" description="Las citas aparecerán aquí." />
+                  <EmptyState title="Sin citas programadas" description="Las próximas citas aparecerán aquí." />
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
-      </Card>
-    </div>
+      </div>
+    </PageTransition>
   );
 }
