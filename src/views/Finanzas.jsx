@@ -23,18 +23,21 @@ export function Finanzas() {
     fetchFinanzas();
   }, []);
 
-  const fetchFinanzas = async () => {
-    try {
-      setLoading(true);
-      const data = await financeServices.getAll();
-      setGanancias(data);
-    } catch (error) {
-      console.error("Error al cargar finanzas:", error);
-      alert("No se pudieron cargar los reportes financieros.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // En Finanzas.jsx
+const sesion = JSON.parse(localStorage.getItem('tenant_session') || '{}');
+
+const fetchFinanzas = async () => {
+  try {
+    setLoading(true);
+    // Pasamos el ID de la sesión
+    const data = await financeServices.getAll(sesion.barberia_id); 
+    setGanancias(data);
+  } catch (error) {
+    console.error("Error al cargar finanzas:", error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const totalIngresos = ganancias.reduce((sum, item) => sum + (item.monto || 0), 0);
   const totalCortes = ganancias.length;

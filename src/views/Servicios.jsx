@@ -18,6 +18,8 @@ import {
 } from '../components/ui';
 
 export function Servicios() {
+  const sesion = JSON.parse(localStorage.getItem('tenant_session') || '{}');
+  const barberiaId = sesion?.barberia_id;
   const [servicios, setServicios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -31,17 +33,17 @@ export function Servicios() {
   }, []);
 
   const fetchServicios = async () => {
-    try {
-      setLoading(true);
-      const data = await barberServices.getAll();
-      setServicios(data);
-    } catch (error) {
-      console.error('Error real de Supabase:', error);
-      alert('No se pudieron cargar los servicios. Revisa la consola (F12).');
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (!barberiaId) return; // Asegura que exista el ID
+  try {
+    setLoading(true);
+    const data = await barberServices.getAll(barberiaId); // PASA EL ID AQUÍ
+    setServicios(data);
+  } catch (error) {
+    console.error('Error al cargar:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleGuardarServicio = async (e) => {
     e.preventDefault();
@@ -51,12 +53,13 @@ export function Servicios() {
     }
 
     try {
-      setSaving(true);
-      const nuevo = await barberServices.create({
-        nombre,
-        precio: parseFloat(precio),
-        duracion: parseInt(duracion, 10)
-      });
+    setSaving(true);
+    const nuevo = await barberServices.create({
+      nombre,
+      precio: parseFloat(precio),
+      duracion: parseInt(duracion, 10),
+      barberia_id: barberiaId
+    });
 
       if (nuevo) {
         setServicios([nuevo, ...servicios]);

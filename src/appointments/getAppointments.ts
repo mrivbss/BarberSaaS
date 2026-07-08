@@ -10,8 +10,8 @@ export interface CitaInput {
 }
 
 export const appointmentServices = {
-  // Listar citas con sus servicios vinculados
-  async getAll() {
+  // Ahora recibe barberiaId como parámetro
+  async getAll(barberiaId: string) {
     const { data, error } = await supabase
       .from('citas')
       .select(`
@@ -21,6 +21,7 @@ export const appointmentServices = {
           precio
         )
       `)
+      .eq('barberia_id', barberiaId) // Filtramos por la barbería del usuario
       .order('fecha', { ascending: true })
       .order('hora', { ascending: true });
 
@@ -28,7 +29,6 @@ export const appointmentServices = {
     return data || [];
   },
 
-  // Crear cita inicial (por defecto entra como 'pendiente')
   async create(cita: CitaInput) {
     const { data, error } = await supabase
       .from('citas')
@@ -41,9 +41,9 @@ export const appointmentServices = {
 
   async cobrarCita(
     citaId: string, 
-    datosGanancia: { monto: number; barbero_id: string; barberia_id: string; concepto: string } // 👈 Agregamos el tipo aquí
+    datosGanancia: { monto: number; barbero_id: string; barberia_id: string; concepto: string }
   ) {
-    // 1. Actualizar estado de la cita a completada
+    // 1. Actualizar estado de la cita
     const updateCita = await supabase
       .from('citas')
       .update({ estado: 'completada' })
@@ -51,7 +51,7 @@ export const appointmentServices = {
 
     if (updateCita.error) throw updateCita.error;
 
-    // 2. Registrar el movimiento en ganancias con su concepto real
+    // 2. Registrar el movimiento en ganancias
     const insertGanancia = await supabase
       .from('ganancias')
       .insert([datosGanancia]);

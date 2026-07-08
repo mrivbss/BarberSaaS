@@ -43,8 +43,8 @@ export function Agenda() {
     try {
       setLoading(true);
       const [listaCitas, listaServicios] = await Promise.all([
-        appointmentServices.getAll(),
-        barberServices.getAll()
+        appointmentServices.getAll(sesion.barberia_id),
+        barberServices.getAll(sesion.barberia_id)
       ]);
       
       setCitas(listaCitas);

@@ -1,11 +1,11 @@
 import { supabase } from '../config/supabaseClient';
 
 export const financeServices = {
-  // Traer el historial completo de ganancias
-  async getAll() {
+  async getAll(barberiaId: string) { // Definimos el tipo string
     const { data, error } = await supabase
       .from('ganancias')
-      .select('*');
+      .select('*')
+      .eq('barberia_id', barberiaId);
 
     if (error) throw error;
     return data || [];

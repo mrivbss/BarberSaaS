@@ -1,25 +1,24 @@
 import { supabase } from '../config/supabaseClient';
 
-// Define la estructura para TypeScript si lo necesitas, o déjalo simple
 export interface ServicioInput {
   nombre: string;
   precio: number;
   duracion: number;
+  barberia_id: string;
 }
 
 export const barberServices = {
-  // Traer todos los servicios
-  async getAll() {
+  async getAll(barberiaId: string) {
     const { data, error } = await supabase
       .from('servicios')
       .select('*')
+      .eq('barberia_id', barberiaId)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
     return data || [];
   },
 
-  // Crear un nuevo servicio
   async create(servicio: ServicioInput) {
     const { data, error } = await supabase
       .from('servicios')
