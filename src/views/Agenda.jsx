@@ -65,6 +65,7 @@ export function Agenda() {
   };
 
   const handleAgendar = async (e) => {
+    console.log("¡Click detectado en Agendar!");
     e.preventDefault();
     if (!cliente || !servicioId || !fecha || !hora) {
       alert('Completa los campos.');
