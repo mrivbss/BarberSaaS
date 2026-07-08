@@ -71,8 +71,11 @@ export function Agenda() {
       return;
     }
 
-    const barberoId = fallbackIds.barbero_id || sesion?.id;
-    const barberiaId = fallbackIds.barberia_id || sesion?.barberia_id;
+    const sesion = JSON.parse(localStorage.getItem('tenant_session') || '{}');
+    const barberoId = sesion?.barbero_id || sesion?.id; 
+    const barberiaId = sesion?.barberia_id;
+
+    console.log("Debug IDs:", { barberoId, barberiaId, sesion });
 
     if (!barberiaId || !barberoId) {
       alert('No se pudo identificar la barbería. Por favor recarga la página.');
