@@ -1,8 +1,14 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
   *,
   *::before,
   *::after {
@@ -13,19 +19,29 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     scroll-behavior: smooth;
+    font-family: var(--font-sans);
   }
 
   body {
-    @apply bg-background text-foreground font-sans;
+    background-color: #f4f4f6; /* Fondo general de la app para dar contraste con el blanco de las tarjetas */
+    color: #0f172a; /* Slate-900: texto oscuro y nítido */
+    font-family: var(--font-sans);
     margin: 0;
     letter-spacing: -0.011em;
   }
 
-  ::selection {
-    @apply bg-foreground text-background;
+  /* Forzamos que los títulos H1, H2, H3 NUNCA usen fuentes Serif */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans) !important;
+    letter-spacing: -0.02em;
   }
 
-  /* Premium scrollbar */
+  ::selection {
+    background-color: #0f172a;
+    color: #ffffff;
+  }
+
+  /* Scrollbar estético */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -34,35 +50,20 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.1);
     border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(0, 0, 0, 0.16);
+    background: rgba(0, 0, 0, 0.2);
   }
 
-  /* Smooth focus ring for accessibility */
   :focus-visible {
-    @apply outline-none ring-2 ring-foreground/20 ring-offset-2 ring-offset-background;
+    @apply outline-none ring-2 ring-slate-900/20 ring-offset-2;
     border-radius: 8px;
   }
 
-  /* Fix native date/time inputs to match system */
   input[type="date"],
   input[type="time"] {
     color-scheme: light;
-  }
-}
-
-@layer components {
-  /* Sidebar nav links — kept for any legacy usage, new sidebar uses inline styles */
-  .nav-link {
-    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground transition-all duration-200;
-  }
-  .nav-link:hover {
-    @apply text-foreground bg-black/[0.03];
-  }
-  .nav-link-active {
-    @apply text-foreground font-semibold bg-surface shadow-input;
   }
 }

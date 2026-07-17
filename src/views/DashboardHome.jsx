@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Calendar, DollarSign, Star, TrendingUp } from 'lucide-react';
+import { Calendar, DollarSign, Star, Clock } from 'lucide-react';
 import { getDashboardStats, getUpcomingAppointments } from '../services/dashboard';
 import { PageTransition } from '../components/layout/PageTransition';
 import {
@@ -45,19 +45,9 @@ export function DashboardHome({ usuario }) {
     loadData();
   }, [usuario]);
 
-  if (loadingData && stats.ingresosHoy === 0) {
-    return (
-      <PageTransition className="flex min-h-[60vh] items-center justify-center p-12">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-foreground/60" />
-          <p className="text-sm text-muted-foreground">Cargando dashboard...</p>
-        </div>
-      </PageTransition>
-    );
-  }
 
   return (
-    <PageTransition className="p-8 lg:p-10 max-w-6xl">
+    <PageTransition className="p-8 lg:p-10 max-w-6xl mx-auto space-y-8">
       <PageHeader
         title="Dashboard"
         subtitle={`Bienvenido, ${usuario?.email}`}
@@ -65,11 +55,34 @@ export function DashboardHome({ usuario }) {
       />
 
       {/* KPI Grid */}
-      <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={Calendar} value={stats.citasHoy} label="Citas hoy" />
-        <StatCard icon={DollarSign} value={`$${(stats.ingresosHoy || 0).toLocaleString('es-CL')}`} label="Ingresos del Día" />
-        <StatCard icon={Star} value="4.8" label="Calificación" />
-        <StatCard icon={TrendingUp} value="+15%" label="Crecimiento" />
+      <div className="mb-10 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {loadingData ? (
+          <>
+            <div className="md:col-span-2 xl:col-span-2 border-2 border-slate-900 animate-pulse bg-slate-100 rounded-xl h-28" />
+            <div className="md:col-span-1 border-2 border-slate-900 animate-pulse bg-slate-100 rounded-xl h-28" />
+            <div className="md:col-span-1 border-2 border-slate-900 animate-pulse bg-slate-100 rounded-xl h-28" />
+            <div className="md:col-span-1 xl:col-span-2 border-2 border-slate-900 animate-pulse bg-slate-100 rounded-xl h-28" />
+          </>
+        ) : (
+          <>
+            <StatCard 
+              className="md:col-span-2 xl:col-span-2" 
+              icon={DollarSign} 
+              value={`$${(stats.ingresosHoy || 0).toLocaleString('es-CL')}`} 
+              label="Ingresos del Día" 
+              subtext={stats.ingresosHoy === 0 ? <span className="text-slate-400 font-medium text-xs">Sin ingresos registrados hoy</span> : null}
+            />
+            <StatCard className="md:col-span-1" icon={Calendar} value={stats.citasHoy} label="Citas hoy" subtext={null} />
+            <StatCard className="md:col-span-1" icon={Star} value="4.8" label="Calificación" subtext={null} />
+            <StatCard 
+              className="md:col-span-1 xl:col-span-2" 
+              icon={Clock} 
+              value={appointments.length > 0 ? appointments[0].hora?.substring(0, 5) : "--:--"} 
+              label="Cita Próxima" 
+              subtext={appointments.length > 0 ? (appointments[0].cliente || 'Sin nombre') : "No hay citas próximas"}
+            />
+          </>
+        )}
       </div>
 
       {/* Upcoming Appointments */}
@@ -87,9 +100,13 @@ export function DashboardHome({ usuario }) {
             {appointments.length > 0 ? (
               appointments.map((appt) => (
                 <TableRow key={appt.id}>
-                  <TableCell className="font-medium">{appt.cliente || 'Sin nombre'}</TableCell>
-                  <TableCell className="text-muted-foreground">{appt.hora?.substring(0, 5)}</TableCell>
-                  <TableCell><Badge variant="muted">Pendiente</Badge></TableCell>
+                  <TableCell className="font-bold text-slate-900">{appt.cliente || 'Sin nombre'}</TableCell>
+                  <TableCell className="font-mono font-bold text-slate-900">{appt.hora?.substring(0, 5)}</TableCell>
+                  <TableCell>
+                    <div className="inline-flex items-center px-2.5 py-0.5 rounded-md font-mono text-xs font-bold bg-amber-300 text-slate-950 border border-slate-900 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                      Pendiente
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))
             ) : (

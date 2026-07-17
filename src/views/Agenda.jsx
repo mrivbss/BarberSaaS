@@ -174,29 +174,32 @@ export function Agenda() {
         subtitle="Gestiona reservas y cobros en tiempo real."
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Form */}
-        <Card padding="md" className="lg:col-span-1 h-fit">
-          <SectionTitle className="mb-5">Nueva Cita</SectionTitle>
+        <div className="bg-white border-2 border-slate-900 rounded-xl shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] p-6 lg:col-span-1 h-fit">
+          <SectionTitle className="mb-5 text-slate-900">Nueva Cita</SectionTitle>
           <form onSubmit={handleAgendar} className="space-y-4">
             
-            <Input
-              type="text"
-              required
-              label="CLIENTE"
-              placeholder="Nombre del cliente"
-              value={cliente}
-              onChange={(e) => setCliente(e.target.value)}
-            />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700">CLIENTE</label>
+              <input
+                type="text"
+                required
+                placeholder="Nombre del cliente"
+                value={cliente}
+                onChange={(e) => setCliente(e.target.value)}
+                className="w-full border-2 border-slate-900 rounded-lg bg-slate-50 px-3 py-2 text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+            </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">SERVICIO</label>
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700">SERVICIO</label>
               <select
                 required
                 value={servicioId}
                 onChange={(e) => setServicioId(e.target.value)}
-                className="w-full h-10 rounded-lg border border-border bg-surface px-3 text-sm text-foreground shadow-input outline-none transition-all duration-200 hover:border-foreground/20 focus:shadow-input-focus focus:border-foreground cursor-pointer appearance-none"
+                className="w-full border-2 border-slate-900 rounded-lg bg-slate-50 px-3 py-2 text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer appearance-none"
               >
                 <option value="">Selecciona...</option>
                 {servicios.map((s) => (
@@ -208,15 +211,37 @@ export function Agenda() {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <Input type="date" required label="FECHA" value={fecha} onChange={(e) => setFecha(e.target.value)} />
-              <Input type="time" required label="HORA" value={hora} onChange={(e) => setHora(e.target.value)} />
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700">FECHA</label>
+                <input 
+                  type="date" 
+                  required 
+                  value={fecha} 
+                  onChange={(e) => setFecha(e.target.value)} 
+                  className="w-full border-2 border-slate-900 rounded-lg bg-slate-50 px-3 py-2 text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700">HORA</label>
+                <input 
+                  type="time" 
+                  required 
+                  value={hora} 
+                  onChange={(e) => setHora(e.target.value)} 
+                  className="w-full border-2 border-slate-900 rounded-lg bg-slate-50 px-3 py-2 text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+              </div>
             </div>
 
-            <Button type="submit" disabled={saving} fullWidth>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Agendar cita'}
-            </Button>
+            <button 
+              type="submit" 
+              disabled={saving} 
+              className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase tracking-wider border-2 border-slate-900 rounded-lg py-3 w-full shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-y-0.5 transition-all flex justify-center items-center mt-2 disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Agendar cita'}
+            </button>
           </form>
-        </Card>
+        </div>
 
         {/* Table */}
         <div className="lg:col-span-2">
@@ -241,42 +266,41 @@ export function Agenda() {
                 {citas.map((c) => (
                   <TableRow key={c.id}>
                     <TableCell>
-                      <p className="font-medium text-foreground">{c.cliente}</p>
-                      <p className="text-[12px] text-muted-foreground mt-0.5">
+                      <p className="font-bold text-slate-900">{c.cliente}</p>
+                      <p className="text-[12px] font-medium text-slate-500 mt-0.5">
                         {c.servicios?.nombre || 'Sin servicio'} · ${c.servicios?.precio ? c.servicios.precio.toLocaleString('es-CL') : 0}
                       </p>
                     </TableCell>
                     <TableCell>
-                      <p className="text-foreground">{c.fecha}</p>
-                      <p className="text-[12px] text-muted-foreground mt-0.5">{c.hora.slice(0, 5)}</p>
+                      <p className="text-slate-600 font-medium">{c.fecha}</p>
+                      <p className="text-[13px] font-mono font-bold text-slate-900 mt-0.5">{c.hora.slice(0, 5)}</p>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
                         {c.estado === 'completada' ? (
-                          <Badge variant="success">Cobrada</Badge>
+                          <div className="inline-flex items-center px-2 py-0.5 rounded-md font-mono text-xs font-bold bg-emerald-300 text-slate-950 border border-slate-900 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                            Cobrada
+                          </div>
                         ) : (
-                          <Button
-                            size="sm"
-                            variant="secondary"
+                          <button
                             onClick={() => handleCobrar(c)}
                             disabled={actionLoading === c.id || actionLoading === `delete-${c.id}`}
+                            className="inline-flex items-center px-3 py-1 rounded-md font-mono text-xs font-bold bg-amber-300 hover:bg-amber-400 text-slate-950 border border-slate-900 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 transition-all disabled:opacity-50"
                           >
                             {actionLoading === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Cobrar'}
-                          </Button>
+                          </button>
                         )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive hover:bg-destructive/10 hover:text-destructive px-2"
+                        <button
                           onClick={() => handleEliminar(c)}
                           disabled={actionLoading === c.id || actionLoading === `delete-${c.id}`}
+                          className="inline-flex items-center px-2 py-1 rounded-md text-red-600 hover:bg-red-100 border border-transparent hover:border-red-900 active:translate-y-0.5 transition-all disabled:opacity-50"
                         >
                           {actionLoading === `delete-${c.id}` ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
                             <Trash2 className="h-4 w-4" />
                           )}
-                        </Button>
+                        </button>
                       </div>
                     </TableCell>
                   </TableRow>

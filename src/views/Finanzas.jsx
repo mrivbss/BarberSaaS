@@ -43,7 +43,7 @@ const fetchFinanzas = async () => {
   const totalCortes = ganancias.length;
 
   return (
-    <PageTransition className="p-8 lg:p-10 max-w-6xl">
+    <PageTransition className="p-8 lg:p-10 max-w-6xl mx-auto space-y-8">
       <PageHeader
         title="Finanzas"
         subtitle="Ingresos y rendimiento del negocio."
@@ -55,13 +55,15 @@ const fetchFinanzas = async () => {
         </div>
       ) : (
         <>
-          <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="mb-10 grid grid-cols-1 gap-4 md:grid-cols-3">
             <StatCard 
+              className="md:col-span-2"
               icon={DollarSign} 
               value={`$${totalIngresos.toLocaleString('es-CL')}`} 
               label="Ingresos en Caja" 
             />
             <StatCard 
+              className="md:col-span-1"
               icon={Receipt} 
               value={totalCortes} 
               label="Servicios Cobrados" 
@@ -87,16 +89,18 @@ const fetchFinanzas = async () => {
                     <TableRow key={g.id}>
                       <TableCell>
                         <div className="flex items-center gap-2.5">
-                          <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-emerald-50">
-                            <ArrowUpRight className="h-3.5 w-3.5 text-emerald-600" />
+                          <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-emerald-300 text-slate-900 border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+                            <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={3} />
                           </div>
-                          <span className="font-medium">{g.concepto || 'Ingreso'}</span>
+                          <span className="font-bold text-slate-900">{g.concepto || 'Ingreso'}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground font-mono text-[11px]">
-                        {g.id.slice(0, 8)}
+                      <TableCell>
+                        <span className="font-mono text-xs bg-slate-200 border-2 border-slate-900 px-2 py-1 rounded-md font-bold text-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+                          {g.id.slice(0, 8)}
+                        </span>
                       </TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums text-emerald-700">
+                      <TableCell className="text-right text-emerald-500 font-mono font-black tabular-nums text-lg">
                         +${g.monto?.toLocaleString('es-CL')}
                       </TableCell>
                     </TableRow>

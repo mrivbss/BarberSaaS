@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Outlet } from 'react-router-dom';
-import { Sidebar } from '../components/layout/Sidebar';
+import { Navbar } from '../components/layout/Navbar';
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -25,9 +25,9 @@ export function Dashboard() {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar onLogout={handleLogout} />
-      <main className="flex-1 overflow-y-auto">
+    <div className="min-h-screen flex flex-col relative">
+      <Navbar onLogout={handleLogout} />
+      <main className="max-w-6xl mx-auto px-4 py-8 w-full flex-1">
         <Outlet />
       </main>
     </div>

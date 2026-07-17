@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../config/supabaseClient';
-import { Loader2 } from 'lucide-react';
-import { Button, Input } from '../components/ui';
+import { Loader2, Scissors } from 'lucide-react';
 import { PageTransition } from '../components/layout/PageTransition';
 
 interface Usuario {
@@ -62,43 +61,51 @@ export function Login({ onLoginSuccess }: LoginProps) {
   };
 
   return (
-    <PageTransition className="flex min-h-screen w-screen items-center justify-center bg-background p-4 sm:p-8">
-      <div className="w-full max-w-sm space-y-10">
-        <div className="space-y-2 text-center">
-          <h1 className="font-serif text-3xl text-foreground tracking-tight">BarberSaaS</h1>
-          <p className="text-sm text-muted-foreground">Ingresa tus credenciales para continuar.</p>
+    <PageTransition className="min-h-screen flex items-center justify-center bg-[#f4f4f6] p-4">
+      <div className="max-w-md w-full bg-white border-2 border-slate-900 rounded-2xl p-8 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] space-y-6">
+        
+        <div className="flex flex-col items-center text-center">
+          <div className="bg-amber-400 border-2 border-slate-900 rounded-xl p-3 w-12 h-12 flex items-center justify-center text-slate-950 font-black shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] mb-4">
+            <Scissors className="w-6 h-6" strokeWidth={2.5} />
+          </div>
+          <h1 className="font-black text-2xl text-slate-900 tracking-tight">Iniciar Sesión</h1>
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-1">Ingresa a tu panel de BarberSaaS</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-4">
-            <Input 
-              type="email" 
-              label="CORREO ELECTRÓNICO"
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-900 mb-1 block">Correo Electrónico</label>
+            <input
+              type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="nombre@ejemplo.com"
               required
+              className="w-full border-2 border-slate-900 rounded-xl bg-slate-50 px-4 py-3 font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-all placeholder:text-slate-400"
             />
-            
-            <Input 
-              type="password" 
-              label="CONTRASEÑA"
+          </div>
+          
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-900 mb-1 block">Contraseña</label>
+            <input
+              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
+              className="w-full border-2 border-slate-900 rounded-xl bg-slate-50 px-4 py-3 font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-all placeholder:text-slate-400"
             />
           </div>
 
-          <Button 
+          <button 
             type="submit" 
             disabled={loading}
-            fullWidth
-            size="lg"
+            className="w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase tracking-wider border-2 border-slate-900 rounded-xl py-3.5 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)] active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Iniciar sesión'}
-          </Button>
+            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Entrar'}
+          </button>
         </form>
+
       </div>
     </PageTransition>
   );
