@@ -116,13 +116,11 @@ Orden de corte recomendado durante una ventana de mantenimiento:
 
 ## 6. Transición de la columna `usuarios.password`
 
-La aplicación ya no lee ni escribe esta columna y los grants nuevos no la exponen a
-clientes autenticados o anónimos. No se elimina en esta primera migración para evitar
-una pérdida irreversible antes de comprobar todas las cuentas existentes.
-
-Cuando todos los usuarios hayan iniciado sesión mediante Supabase Auth y exista un
-respaldo verificado, se recomienda una segunda migración que primero anule sus valores
-y después elimine la columna.
+Las cuentas heredadas se migraron a Supabase Auth conservando sus UUID y credenciales,
+y se verificó el inicio de sesión antes del corte. La migración incremental
+`202607200002_fix_general_portal_and_remove_legacy_password.sql` elimina la columna
+`usuarios.password`; la aplicación ya no almacena ni compara contraseñas en tablas
+públicas.
 
 ## 7. Límites conocidos
 
