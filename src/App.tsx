@@ -46,7 +46,8 @@ export function App() {
   return (
     <Routes>
       {/* 2. RUTA PÚBLICA DEL CLIENTE (Libre de sesión y antes del comodín) */}
-      <Route path="/b/:slug" element={<PublicLandingPage />} />
+      <Route path="/b/:barberiaSlug" element={<PublicLandingPage />} />
+      <Route path="/b/:barberiaSlug/:barberoSlug" element={<PublicLandingPage />} />
 
       {/* Login */}
       <Route 

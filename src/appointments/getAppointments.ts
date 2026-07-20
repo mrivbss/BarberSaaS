@@ -11,8 +11,8 @@ export interface CitaInput {
 
 export const appointmentServices = {
   // Ahora recibe barberiaId como parámetro
-  async getAll(barberiaId: string) {
-    const { data, error } = await supabase
+  async getAll(barberiaId: string, barberoId?: string) {
+    let query = supabase
       .from('citas')
       .select(`
         *,
@@ -21,7 +21,13 @@ export const appointmentServices = {
           precio
         )
       `)
-      .eq('barberia_id', barberiaId) // Filtramos por la barbería del usuario
+      .eq('barberia_id', barberiaId);
+
+    if (barberoId) {
+      query = query.eq('barbero_id', barberoId);
+    }
+
+    const { data, error } = await query
       .order('fecha', { ascending: true })
       .order('hora', { ascending: true });
 

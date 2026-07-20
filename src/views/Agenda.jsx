@@ -85,6 +85,9 @@ export function Agenda() {
 
   // Leer sesión desde localStorage para obtener los IDs reales del tenant
   const sesion = JSON.parse(localStorage.getItem('tenant_session') || '{}');
+  const agendaBarberoId = sesion?.rol === 'barbero'
+    ? (sesion?.barbero_id || sesion?.id)
+    : undefined;
   const [fallbackIds, setFallbackIds] = useState({ barbero_id: '', barberia_id: sesion?.barberia_id || '' });
 
   useEffect(() => {
@@ -96,7 +99,7 @@ export function Agenda() {
     try {
       setLoading(true);
       const [listaCitas, listaServicios] = await Promise.all([
-        appointmentServices.getAll(sesion.barberia_id),
+        appointmentServices.getAll(sesion.barberia_id, agendaBarberoId),
         barberServices.getAll(sesion.barberia_id)
       ]);
       
@@ -147,7 +150,7 @@ export function Agenda() {
         servicio_id: servicioId
       });
 
-      const actualizada = await appointmentServices.getAll(sesion.barberia_id);
+      const actualizada = await appointmentServices.getAll(sesion.barberia_id, agendaBarberoId);
       setCitas(actualizada);
 
       setCliente('');
@@ -191,7 +194,7 @@ export function Agenda() {
         concepto: `Cita: ${nombreServicio} - ${cita.cliente}`
       });
       
-      const actualizada = await appointmentServices.getAll(sesion.barberia_id);
+      const actualizada = await appointmentServices.getAll(sesion.barberia_id, agendaBarberoId);
       setCitas(actualizada);
     } catch (error) {
       console.error("Error en flujo de cobro:", error);

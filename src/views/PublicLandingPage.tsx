@@ -3,15 +3,46 @@ import { useParams } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, ChevronRight, Calendar, Clock, Loader2 } from 'lucide-react';
 import { supabase } from '../config/supabaseClient';
 
+interface BarberiaPublica {
+  id: string;
+  nombre: string;
+  comuna: string;
+}
+
+interface BarberoPublico {
+  id: string;
+  email: string;
+}
+
+interface ServicioPublico {
+  id: number;
+  nombre: string;
+  precio: number;
+}
+
+interface CitaPublicaInput {
+  cliente: string;
+  servicio_id: number;
+  fecha: string;
+  hora: string;
+  barberia_id: string;
+  barbero_id?: string;
+  estado: string;
+}
+
 export function PublicLandingPage() {
-  const { slug } = useParams<{ slug: string }>();
-  const [barberia, setBarberia] = useState<any>(null);
-  const [servicios, setServicios] = useState<any[]>([]);
+  const { barberiaSlug, barberoSlug } = useParams<{
+    barberiaSlug: string;
+    barberoSlug?: string;
+  }>();
+  const [barberia, setBarberia] = useState<BarberiaPublica | null>(null);
+  const [barbero, setBarbero] = useState<BarberoPublico | null>(null);
+  const [servicios, setServicios] = useState<ServicioPublico[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Estados para el formulario de reserva
-  const [servicioSeleccionado, setServicioSeleccionado] = useState<any>(null);
+  const [servicioSeleccionado, setServicioSeleccionado] = useState<ServicioPublico | null>(null);
   const [clienteNombre, setClienteNombre] = useState('');
   const [fecha, setFecha] = useState('');
   const [hora, setHora] = useState('');
@@ -70,40 +101,103 @@ export function PublicLandingPage() {
 
   const [submitting, setSubmitting] = useState(false);
   const [mensajeExito, setMensajeExito] = useState<string | null>(null);
+  const [errorReserva, setErrorReserva] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = 'Reservas | BarberSaaS';
-    if (!slug) return;
+    let active = true;
 
     async function fetchData() {
       setLoading(true);
       setError(null);
+      setErrorReserva(null);
+      setMensajeExito(null);
+      setBarberia(null);
+      setBarbero(null);
+      setServicios([]);
 
-      const { data: barberiaData, error: barberiaError } = await supabase
-        .from('barberias')
-        .select('*')
-        .eq('slug', slug)
-        .maybeSingle();
-
-      if (barberiaError || !barberiaData) {
-        setError('No se pudo cargar la información de la barbería.');
+      if (!barberiaSlug) {
+        setError('Barbería no encontrada.');
         setLoading(false);
         return;
       }
 
-      setBarberia(barberiaData);
+      try {
+        const { data: barberiaData, error: barberiaError } = await supabase
+          .from('barberias')
+          .select('id, nombre, comuna')
+          .eq('slug', barberiaSlug)
+          .maybeSingle();
 
-      const { data: serviciosData } = await supabase
-        .from('servicios')
-        .select('*')
-        .eq('barberia_id', barberiaData.id);
+        if (!active) return;
 
-      setServicios(serviciosData || []);
-      setLoading(false);
+        if (barberiaError) {
+          setError('No se pudo cargar la información de la barbería.');
+          return;
+        }
+
+        if (!barberiaData) {
+          setError('Barbería no encontrada.');
+          return;
+        }
+
+        setBarberia(barberiaData);
+
+        if (barberoSlug) {
+          const { data: barberoData, error: barberoError } = await supabase
+            .from('usuarios')
+            .select('id, email')
+            .eq('barberia_id', barberiaData.id)
+            .eq('slug', barberoSlug)
+            .eq('rol', 'barbero')
+            .maybeSingle();
+
+          if (!active) return;
+
+          if (barberoError) {
+            setError('No se pudo cargar la información del barbero.');
+            return;
+          }
+
+          if (!barberoData) {
+            setError('Barbero no encontrado en esta barbería.');
+            return;
+          }
+
+          setBarbero(barberoData);
+        }
+
+        const { data: serviciosData, error: serviciosError } = await supabase
+          .from('servicios')
+          .select('id, nombre, precio')
+          .eq('barberia_id', barberiaData.id);
+
+        if (!active) return;
+
+        if (serviciosError) {
+          setError('No se pudieron cargar los servicios de la barbería.');
+          return;
+        }
+
+        setServicios(serviciosData || []);
+      } catch (loadError) {
+        console.error('Error al cargar el portal público:', loadError);
+        if (active) {
+          setError('No se pudo cargar el portal de reservas.');
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
     }
 
     fetchData();
-  }, [slug]);
+
+    return () => {
+      active = false;
+    };
+  }, [barberiaSlug, barberoSlug]);
 
   const handleReservar = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,36 +206,51 @@ export function PublicLandingPage() {
       return;
     }
 
+    if (!barberia || (barberoSlug && !barbero)) {
+      setErrorReserva('No se pudo validar el destino de la reserva. Recarga la página e inténtalo nuevamente.');
+      return;
+    }
+
     setSubmitting(true);
     setMensajeExito(null);
+    setErrorReserva(null);
 
-    const { error: insertError } = await supabase.from('citas').insert([
-      {
-        cliente: clienteNombre,
-        servicio_id: servicioSeleccionado.id,
-        fecha: fecha,
-        hora: hora.includes(':') && hora.split(':').length === 2 ? `${hora}:00` : hora,
-        barberia_id: barberia.id,
-        estado: 'Pendiente',
-      },
-    ]);
+    const cita: CitaPublicaInput = {
+      cliente: clienteNombre,
+      servicio_id: servicioSeleccionado.id,
+      fecha,
+      hora: hora.includes(':') && hora.split(':').length === 2 ? `${hora}:00` : hora,
+      barberia_id: barberia.id,
+      estado: 'Pendiente',
+      ...(barbero ? { barbero_id: barbero.id } : {}),
+    };
 
-    setSubmitting(false);
+    try {
+      const { error: insertError } = await supabase.from('citas').insert([cita]);
 
-    if (insertError) {
-      console.error('Error al crear la cita:', insertError);
-      alert('Hubo un error al registrar tu reserva. Inténtalo de nuevo.');
-    } else {
-      setMensajeExito('¡Cita agendada con éxito! El barbero ya la tiene en su agenda.');
+      if (insertError) {
+        console.error('Error al crear la cita:', insertError);
+        setErrorReserva('Hubo un error al registrar tu reserva. Inténtalo de nuevo.');
+        return;
+      }
+
+      setMensajeExito('¡Cita agendada con éxito!');
       setClienteNombre('');
       setFecha('');
       setHora('');
       setServicioSeleccionado(null);
+    } catch (createError) {
+      console.error('Error inesperado al crear la cita:', createError);
+      setErrorReserva('Hubo un error al registrar tu reserva. Inténtalo de nuevo.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   if (loading) return <div className="p-10 text-center font-bold">Cargando...</div>;
-  if (error || !barberia) return <div className="p-10 text-center text-red-600 font-bold">{error}</div>;
+  if (error || !barberia) {
+    return <div className="p-10 text-center text-red-600 font-bold">{error || 'Barbería no encontrada.'}</div>;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8">
@@ -150,11 +259,22 @@ export function PublicLandingPage() {
         <div className="border-2 border-slate-900 rounded-xl p-6 bg-white shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] mb-6">
           <h1 className="text-3xl font-black uppercase tracking-tighter">{barberia.nombre}</h1>
           <p className="text-base mt-1 font-medium text-slate-600">📍 {barberia.comuna}</p>
+          {barbero && (
+            <p className="text-sm mt-2 font-bold text-slate-700">
+              Reserva con {barbero.email.split('@')[0]}
+            </p>
+          )}
         </div>
 
         {mensajeExito && (
           <div className="border-2 border-emerald-600 rounded-xl p-4 bg-emerald-50 text-emerald-800 font-bold mb-6 shadow-[4px_4px_0px_0px_rgba(5,150,105,1)]">
             {mensajeExito}
+          </div>
+        )}
+
+        {errorReserva && (
+          <div className="border-2 border-red-600 rounded-xl p-4 bg-red-50 text-red-800 font-bold mb-6 shadow-[4px_4px_0px_0px_rgba(220,38,38,1)]">
+            {errorReserva}
           </div>
         )}
 
