@@ -72,6 +72,7 @@ export function PublicLandingPage() {
   const [mensajeExito, setMensajeExito] = useState<string | null>(null);
 
   useEffect(() => {
+    document.title = 'Agendar | BarberSaaS';
     if (!slug) return;
 
     async function fetchData() {

@@ -7,6 +7,7 @@ export function Dashboard() {
   const [session, setSession] = useState(null);
 
   useEffect(() => {
+    document.title = 'Dashboard | BarberSaaS';
     const storedSession = localStorage.getItem('tenant_session');
     if (!storedSession) {
       navigate('/login');

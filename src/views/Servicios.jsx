@@ -30,6 +30,7 @@ export function Servicios() {
   const [duracion, setDuracion] = useState('30');
 
   useEffect(() => {
+    document.title = 'Servicios | BarberSaaS';
     fetchServicios();
   }, []);
 

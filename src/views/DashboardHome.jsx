@@ -25,6 +25,7 @@ export function DashboardHome({ usuario }) {
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
+    document.title = 'Dashboard | BarberSaaS';
     if (!usuario?.barberia_id) return;
 
     const loadData = async () => {

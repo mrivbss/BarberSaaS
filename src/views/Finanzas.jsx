@@ -20,6 +20,7 @@ export function Finanzas() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    document.title = 'Finanzas | BarberSaaS';
     fetchFinanzas();
   }, []);
 

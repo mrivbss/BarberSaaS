@@ -89,6 +89,7 @@ export function Agenda() {
 
   useEffect(() => {
     initAgenda();
+    document.title = 'Agenda | BarberSaaS';
   }, []);
 
   const initAgenda = async () => {
