@@ -18,6 +18,10 @@
   <img src="https://img.shields.io/badge/License-Proprietary-red" alt="License">
 </p>
 
+<a href="https://barber-saas-cl.vercel.app/b/estilo-urbano">
+  <img src="https://img.shields.io/badge/🚀%20Try%20Live%20Demo-Public%20Booking-success?style=for-the-badge" alt="Live Demo">
+</a>
+
 BarberSaaS es una aplicación web desarrollada para la administración de barberías bajo un modelo **SaaS multi-tenant**, donde múltiples negocios pueden operar de forma independiente sobre una misma plataforma. La aplicación permite gestionar la operación diaria de una barbería mediante un panel administrativo, ofreciendo herramientas para la administración de citas, servicios, ingresos y reservas públicas.
 
 ## La arquitectura está basada en una aplicación React desplegada como Single Page Application (SPA) que se comunica directamente con Supabase para autenticación, almacenamiento y consultas de datos, sin un servidor backend tradicional.
