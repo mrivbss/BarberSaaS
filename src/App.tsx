@@ -67,6 +67,7 @@ export function App() {
       <Route path="/b/:barberiaSlug" element={<PublicLandingPage />} />
       <Route path="/b/:barberiaSlug/:barberoSlug" element={<PublicLandingPage />} />
       <Route path="/login" element={<LoginRoute />} />
+      <Route path="/auth/accept-invite" element={<SetPassword />} />
       <Route path="/establecer-contrasena" element={<SetPassword />} />
       <Route path="/set-password" element={<SetPassword />} />
 

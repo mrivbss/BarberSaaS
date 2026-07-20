@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Loader2, Scissors } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import type { UserRole } from '../services/login';
@@ -14,13 +14,20 @@ function loginErrorMessage(error: unknown): string {
   return 'No se pudo iniciar sesión. Inténtalo nuevamente.';
 }
 
+interface LoginNavigationState {
+  notice?: string;
+}
+
 export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const { signIn } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
+  const navigationState = location.state as LoginNavigationState | null;
+  const notice = typeof navigationState?.notice === 'string' ? navigationState.notice : null;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -56,6 +63,12 @@ export function Login() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {notice && (
+            <div role="status" className="rounded-lg border-2 border-slate-900 bg-amber-50 px-3 py-2 text-sm font-semibold text-slate-800">
+              {notice}
+            </div>
+          )}
+
           <div>
             <label htmlFor="login-email" className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-900">
               Correo electrónico

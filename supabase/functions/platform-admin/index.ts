@@ -438,7 +438,7 @@ async function createTenantUser(admin: SupabaseClient, body: JsonRecord): Promis
   const publicAppUrl = getPublicAppUrl();
   const inviteOptions: { data: { nombre: string }; redirectTo?: string } = {
     data: { nombre },
-    redirectTo: `${publicAppUrl}/establecer-contrasena`,
+    redirectTo: `${publicAppUrl}/auth/accept-invite`,
   };
 
   const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(

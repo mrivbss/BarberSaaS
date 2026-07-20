@@ -46,9 +46,15 @@ No lo copies a Vercel, al frontend ni a una variable con prefijo `VITE_`.
 Configura además en Supabase Auth:
 
 - Site URL: `https://tu-dominio.cl`
-- Redirect URL permitida: `https://tu-dominio.cl/establecer-contrasena`
+- Redirect URL permitida: `https://tu-dominio.cl/auth/accept-invite`
+- Conserva temporalmente `https://tu-dominio.cl/establecer-contrasena` si todavía
+  existen invitaciones emitidas por una versión anterior.
 - SMTP de producción, si las invitaciones no deben usar el proveedor de correo de
   prueba de Supabase.
+
+La plantilla **Invite user** debe enlazar `{{ .ConfirmationURL }}` para que respete
+el `redirectTo` enviado por `platform-admin`; no reemplaces ese enlace por
+`{{ .SiteURL }}`.
 
 ## 3. Crear el único superadmin inicial
 
@@ -93,7 +99,7 @@ VITE_PUBLIC_APP_URL=https://tu-dominio.cl
 ```
 
 `vercel.json` ya reescribe todas las rutas a `index.html`, por lo que `/platform`,
-`/establecer-contrasena` y las rutas públicas anidadas funcionan al recargar.
+`/auth/accept-invite` y las rutas públicas anidadas funcionan al recargar.
 
 Orden de corte recomendado durante una ventana de mantenimiento:
 
