@@ -36,6 +36,7 @@ import { buildPublicBookingUrl, normalizeSlug, validateSlug } from '../../lib/sl
 import {
   PlatformAdminError,
   platformAdmin,
+  type InvitationDelivery,
   type PlatformBarberiaDetail as BarberiaDetail,
   type PlatformUsuario,
   type TenantUserRole,
@@ -57,6 +58,11 @@ interface InviteErrors {
 interface NavigationState {
   notice?: string;
   openInvite?: boolean;
+}
+
+interface GeneratedInvite {
+  email: string;
+  url: string;
 }
 
 const initialInviteForm: InviteForm = {
@@ -108,6 +114,7 @@ export function PlatformBarberiaDetail() {
   const [inviteErrors, setInviteErrors] = useState<InviteErrors>({});
   const [slugEdited, setSlugEdited] = useState(false);
   const [inviting, setInviting] = useState(false);
+  const [generatedInvite, setGeneratedInvite] = useState<GeneratedInvite | null>(null);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [updatingBarberia, setUpdatingBarberia] = useState(false);
 
@@ -176,27 +183,36 @@ export function PlatformBarberiaDetail() {
     return Object.keys(nextErrors).length === 0;
   };
 
-  const inviteUser = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!barberiaId || !validateInvite()) return;
+  const createInvite = async (delivery: InvitationDelivery) => {
+    if (inviting || !barberiaId || !validateInvite()) return;
 
     setInviting(true);
     setError(null);
     setSuccess(null);
+    setGeneratedInvite(null);
     try {
-      const created = await platformAdmin.createTenantUser({
-        barberia_id: barberiaId,
-        nombre: invite.nombre.trim(),
-        email: invite.email.trim().toLowerCase(),
-        rol: invite.rol,
-        ...(invite.rol === 'barbero' && slugEdited ? { slug: invite.slug } : {}),
-      });
+      const result = await platformAdmin.createTenantUser(
+        {
+          barberia_id: barberiaId,
+          nombre: invite.nombre.trim(),
+          email: invite.email.trim().toLowerCase(),
+          rol: invite.rol,
+          ...(invite.rol === 'barbero' && slugEdited ? { slug: invite.slug } : {}),
+        },
+        delivery,
+      );
+      const created = result.usuario;
       setDetail((current) =>
         current ? { ...current, usuarios: [...current.usuarios, created] } : current,
       );
-      setSuccess(
-        `Usuario ${created.nombre} creado correctamente. La invitación fue enviada a ${created.email}.`,
-      );
+      if (result.invitacion_url) {
+        setGeneratedInvite({ email: created.email, url: result.invitacion_url });
+        setSuccess(`Usuario ${created.nombre} creado correctamente. Comparte su enlace de invitación.`);
+      } else {
+        setSuccess(
+          `Usuario ${created.nombre} creado correctamente. La invitación fue enviada a ${created.email}.`,
+        );
+      }
       resetInvite();
     } catch (inviteError) {
       if (inviteError instanceof PlatformAdminError) {
@@ -210,6 +226,21 @@ export function PlatformBarberiaDetail() {
       setError(errorMessage(inviteError));
     } finally {
       setInviting(false);
+    }
+  };
+
+  const inviteUser = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void createInvite('link');
+  };
+
+  const copyInviteUrl = async () => {
+    if (!generatedInvite) return;
+    try {
+      await navigator.clipboard.writeText(generatedInvite.url);
+      setSuccess(`Enlace de invitación para ${generatedInvite.email} copiado al portapapeles.`);
+    } catch {
+      setError('No se pudo copiar automáticamente. Selecciona y copia el enlace mostrado.');
     }
   };
 
@@ -377,6 +408,25 @@ export function PlatformBarberiaDetail() {
           </button>
         </div>
       )}
+      {generatedInvite && (
+        <div role="status" className="space-y-3 rounded-xl border-2 border-amber-600 bg-amber-50 p-4 text-sm text-slate-900">
+          <div>
+            <p className="font-black">Enlace de activación listo</p>
+            <p className="mt-1 font-medium text-slate-600">
+              Envíalo a {generatedInvite.email}. Es una credencial de un solo uso; no lo publiques.
+            </p>
+          </div>
+          <code className="block break-all rounded-lg border border-amber-300 bg-white p-3 text-xs font-semibold">
+            {generatedInvite.url}
+          </code>
+          <div className="flex justify-end">
+            <Button type="button" size="sm" onClick={() => void copyInviteUrl()}>
+              <Clipboard className="h-4 w-4" />
+              Copiar enlace de invitación
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <StatCard icon={Users} value={summary.users} label="Usuarios" subtext="Perfiles del tenant" />
@@ -517,7 +567,8 @@ export function PlatformBarberiaDetail() {
               <div>
                 <h3 className="font-black text-slate-950">Invitar usuario</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Se enviará un correo para que la persona establezca su contraseña.
+                  Genera un enlace para compartir de inmediato. El envío directo por correo requiere
+                  configurar un proveedor SMTP propio.
                 </p>
               </div>
               <button type="button" onClick={resetInvite} aria-label="Cerrar formulario">
@@ -525,7 +576,7 @@ export function PlatformBarberiaDetail() {
               </button>
             </div>
 
-            <form onSubmit={(event) => void inviteUser(event)} noValidate className="space-y-5">
+            <form onSubmit={inviteUser} noValidate className="space-y-5">
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <Input
                   label="Nombre"
@@ -630,9 +681,18 @@ export function PlatformBarberiaDetail() {
                 <Button type="button" variant="ghost" onClick={resetInvite}>
                   Cancelar
                 </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={inviting}
+                  onClick={() => void createInvite('email')}
+                >
+                  <Mail className="h-4 w-4" />
+                  Enviar por correo
+                </Button>
                 <Button type="submit" disabled={inviting} className="bg-slate-950 text-white">
-                  {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                  {inviting ? 'Enviando invitación...' : 'Crear y enviar invitación'}
+                  {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clipboard className="h-4 w-4" />}
+                  {inviting ? 'Creando invitación...' : 'Generar enlace de invitación'}
                 </Button>
               </div>
             </form>

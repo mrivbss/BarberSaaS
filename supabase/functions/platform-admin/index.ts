@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from 'npm:@supabase/supabase-js@2.108.2'
 
 type JsonRecord = Record<string, unknown>;
 type TenantRole = 'admin' | 'barbero';
+type InvitationDelivery = 'email' | 'link';
 
 interface BarberiaRow {
   id: string;
@@ -105,6 +106,14 @@ function requestedBoolean(body: JsonRecord, key: string): boolean {
     throw new ApiError(400, 'invalid_input', 'El estado solicitado no es válido.');
   }
   return body[key] as boolean;
+}
+
+function invitationDelivery(body: JsonRecord): InvitationDelivery {
+  const value = body.delivery ?? 'email';
+  if (value !== 'email' && value !== 'link') {
+    throw new ApiError(400, 'invalid_delivery', 'El método de invitación no es válido.');
+  }
+  return value;
 }
 
 function responseHeaders(request: Request): { allowed: boolean; headers: HeadersInit } {
@@ -398,6 +407,7 @@ async function createTenantUser(admin: SupabaseClient, body: JsonRecord): Promis
     throw new ApiError(400, 'invalid_role', 'Sólo se pueden crear administradores o barberos.');
   }
   const rol: TenantRole = roleValue;
+  const delivery = invitationDelivery(body);
 
   const { data: duplicateProfile, error: duplicateError } = await admin
     .from('usuarios')
@@ -436,28 +446,64 @@ async function createTenantUser(admin: SupabaseClient, body: JsonRecord): Promis
   }
 
   const publicAppUrl = getPublicAppUrl();
-  const inviteOptions: { data: { nombre: string }; redirectTo?: string } = {
-    data: { nombre },
-    redirectTo: `${publicAppUrl}/auth/accept-invite`,
-  };
+  const redirectTo = `${publicAppUrl}/auth/accept-invite`;
+  let authUserId: string;
+  let invitationUrl: string | null = null;
 
-  const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
-    email,
-    inviteOptions,
-  );
-  if (inviteError || !inviteData.user) {
-    const duplicate = inviteError?.message.toLowerCase().includes('already')
-      || inviteError?.status === 422;
-    throw new ApiError(
-      duplicate ? 409 : 502,
-      duplicate ? 'duplicate_email' : 'auth_invite_failed',
-      duplicate
-        ? 'Ya existe una cuenta Auth con ese correo.'
-        : 'No se pudo enviar la invitación. Inténtalo nuevamente.',
+  if (delivery === 'link') {
+    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+      type: 'invite',
+      email,
+      options: {
+        data: { nombre },
+        redirectTo,
+      },
+    });
+
+    if (linkError || !linkData.user || !linkData.properties?.action_link) {
+      const duplicate = linkError?.code === 'email_exists'
+        || linkError?.code === 'user_already_exists'
+        || linkError?.status === 422;
+      throw new ApiError(
+        duplicate ? 409 : 502,
+        duplicate ? 'duplicate_email' : 'auth_invite_link_failed',
+        duplicate
+          ? 'Ya existe una cuenta Auth con ese correo.'
+          : 'No se pudo generar el enlace de invitación. Inténtalo nuevamente.',
+      );
+    }
+
+    authUserId = linkData.user.id;
+    invitationUrl = linkData.properties.action_link;
+  } else {
+    const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
+      email,
+      { data: { nombre }, redirectTo },
     );
-  }
+    if (inviteError || !inviteData.user) {
+      const duplicate = inviteError?.code === 'email_exists'
+        || inviteError?.code === 'user_already_exists'
+        || inviteError?.message.toLowerCase().includes('already')
+        || inviteError?.status === 422;
+      const emailUnavailable = inviteError?.code === 'email_address_not_authorized'
+        || inviteError?.code === 'over_email_send_rate_limit';
+      throw new ApiError(
+        duplicate ? 409 : emailUnavailable ? 503 : 502,
+        duplicate
+          ? 'duplicate_email'
+          : emailUnavailable
+            ? 'email_delivery_unavailable'
+            : 'auth_invite_failed',
+        duplicate
+          ? 'Ya existe una cuenta Auth con ese correo.'
+          : emailUnavailable
+            ? 'El correo de prueba de Supabase no puede enviar esta invitación. Genera un enlace para compartirlo directamente.'
+            : 'No se pudo enviar la invitación. Inténtalo nuevamente.',
+      );
+    }
 
-  const authUserId = inviteData.user.id;
+    authUserId = inviteData.user.id;
+  }
   const { data: profile, error: profileError } = await admin
     .from('usuarios')
     .insert({
@@ -489,7 +535,11 @@ async function createTenantUser(admin: SupabaseClient, body: JsonRecord): Promis
     throw new ApiError(500, 'profile_create_failed', 'No se pudo crear el perfil; la cuenta temporal fue eliminada.');
   }
 
-  return { usuario: profile, invitacion_enviada: true };
+  return {
+    usuario: profile,
+    invitacion_enviada: delivery === 'email',
+    invitacion_url: invitationUrl,
+  };
 }
 
 async function setUserActive(admin: SupabaseClient, body: JsonRecord): Promise<JsonRecord> {
