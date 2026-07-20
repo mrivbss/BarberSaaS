@@ -5,6 +5,7 @@ import { Login } from './views/Login';
 import { Agenda } from './views/Agenda';
 import { Servicios } from './views/Servicios';
 import { Finanzas } from './views/Finanzas';
+import { PublicLandingPage } from './views/PublicLandingPage';
 
 import { Dashboard } from './views/Dashboard';
 
@@ -22,7 +23,6 @@ export function App() {
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    // Intentamos recuperar la sesión
     const sesionGuardada = localStorage.getItem('tenant_session');
     if (sesionGuardada) {
       try {
@@ -45,7 +45,10 @@ export function App() {
 
   return (
     <Routes>
-      {/* Login: Si ya hay usuario, lo mandamos al dashboard */}
+      {/* 2. RUTA PÚBLICA DEL CLIENTE (Libre de sesión y antes del comodín) */}
+      <Route path="/b/:slug" element={<PublicLandingPage />} />
+
+      {/* Login */}
       <Route 
         path="/login" 
         element={!usuario ? <Login onLoginSuccess={setUsuario} /> : <Navigate to="/dashboard" />} 
@@ -60,10 +63,9 @@ export function App() {
         <Route path="agenda" element={<Agenda />} />
         <Route path="servicios" element={<Servicios />} />
         <Route path="finanzas" element={<Finanzas />} />
-
       </Route>
 
-      {/* Ruta por defecto: Redirige según si hay sesión o no */}
+      {/* Ruta por defecto */}
       <Route path="*" element={<Navigate to={usuario ? "/dashboard" : "/login"} />} />
     </Routes>
   );
