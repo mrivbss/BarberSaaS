@@ -1,23 +1,55 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'http://127.0.0.1:54321';
-const supabaseSecretKey = 'sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz'; 
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseSecretKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseSecretKey) {
+  throw new Error('Define SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY para ejecutar este script.');
+}
+
+const localSupabase = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(supabaseUrl);
+const remoteProjectRef = supabaseUrl.match(/^https:\/\/([a-z0-9]+)\.supabase\.co\/?$/)?.[1];
+if (
+  !localSupabase
+  && (
+    process.env.ALLOW_REMOTE_SEED !== 'true'
+    || !remoteProjectRef
+    || process.env.CONFIRM_PROJECT_REF !== remoteProjectRef
+  )
+) {
+  throw new Error(
+    'Para un seed remoto define ALLOW_REMOTE_SEED=true y CONFIRM_PROJECT_REF con el project ref exacto.',
+  );
+}
 const supabase = createClient(supabaseUrl, supabaseSecretKey);
 
 async function seed() {
   console.log('--- Iniciando Seed de Dashboard ---');
   
   // 1. Obtener la primera barbería y el primer usuario (admin)
-  const { data: barberias } = await supabase.from('barberias').select('id').limit(1);
+  const { data: barberias, error: barberiasError } = await supabase
+    .from('barberias')
+    .select('id')
+    .eq('activo', true)
+    .limit(1);
+  if (barberiasError) throw barberiasError;
   if (!barberias || barberias.length === 0) {
     console.error('No hay barberías creadas. Corre setup-data.mjs primero.');
     return;
   }
   const barberiaId = barberias[0].id;
 
-  const { data: usuarios } = await supabase.from('usuarios').select('id').eq('barberia_id', barberiaId).limit(1);
+  const { data: usuarios, error: usuariosError } = await supabase
+    .from('usuarios')
+    .select('id')
+    .eq('barberia_id', barberiaId)
+    .eq('activo', true)
+    .eq('rol', 'barbero')
+    .limit(1);
+  if (usuariosError) throw usuariosError;
   if (!usuarios || usuarios.length === 0) {
-    console.error('No hay usuarios en esta barbería.');
+    console.error('No hay un barbero activo en esta barbería.');
+    process.exitCode = 1;
     return;
   }
   const barberoId = usuarios[0].id;
@@ -51,4 +83,7 @@ async function seed() {
   console.log('--- Fin del Seed ---');
 }
 
-seed();
+seed().catch((error) => {
+  console.error('El seed falló:', error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+});

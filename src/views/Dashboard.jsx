@@ -1,33 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate, Outlet } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 import { Navbar } from '../components/layout/Navbar';
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const [session, setSession] = useState(null);
+  const { profile, signOut } = useAuth();
 
   useEffect(() => {
     document.title = 'Dashboard | BarberSaaS';
-    const storedSession = localStorage.getItem('tenant_session');
-    if (!storedSession) {
-      navigate('/login');
-    } else {
-      setSession(JSON.parse(storedSession));
-    }
-  }, [navigate]);
+  }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem('tenant_session');
-    navigate('/login');
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('No se pudo cerrar la sesión remota:', error);
+    } finally {
+      navigate('/login', { replace: true });
+    }
   };
 
-  if (!session) {
-    return null;
-  }
+  if (!profile) return null;
 
   return (
     <div className="min-h-screen flex flex-col relative">
-      <Navbar onLogout={handleLogout} />
+      <Navbar role={profile.rol} onLogout={handleLogout} />
       <main className="max-w-6xl mx-auto px-4 py-8 w-full flex-1">
         <Outlet />
       </main>

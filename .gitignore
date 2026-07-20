@@ -4,6 +4,7 @@ node_modules/
 # Environment
 .env
 .env.*
+!.env.example
 
 # Build
 dist/
@@ -15,5 +16,5 @@ supabase/snippets/Untitled query 245.sql
 supabase/snippets/Untitled query 288.sql
 supabase/snippets/Untitled query 380.sql
 supabase/snippets/Untitled query 424.sql
-supabase/snippets/Untitled query 424.sql
-supabase/snippets/Untitled query 424.sql
+supabase/.temp/
+supabase/.branches/

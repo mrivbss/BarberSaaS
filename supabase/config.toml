@@ -1,0 +1,4 @@
+project_id = "barbersaas"
+
+[functions.platform-admin]
+verify_jwt = true

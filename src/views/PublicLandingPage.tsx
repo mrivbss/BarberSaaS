@@ -4,14 +4,14 @@ import { ChevronDown, ChevronLeft, ChevronRight, Calendar, Clock, Loader2 } from
 import { supabase } from '../config/supabaseClient';
 
 interface BarberiaPublica {
-  id: string;
   nombre: string;
   comuna: string;
+  slug: string;
 }
 
 interface BarberoPublico {
-  id: string;
-  email: string;
+  nombre: string;
+  slug: string;
 }
 
 interface ServicioPublico {
@@ -20,14 +20,15 @@ interface ServicioPublico {
   precio: number;
 }
 
-interface CitaPublicaInput {
-  cliente: string;
-  servicio_id: number;
-  fecha: string;
-  hora: string;
-  barberia_id: string;
-  barbero_id?: string;
-  estado: string;
+interface PortalPublicoResponse {
+  status: string;
+  barberia?: BarberiaPublica;
+  barbero?: BarberoPublico | null;
+  servicios?: ServicioPublico[];
+}
+
+interface CitaPublicaResponse {
+  status: string;
 }
 
 export function PublicLandingPage() {
@@ -123,63 +124,48 @@ export function PublicLandingPage() {
       }
 
       try {
-        const { data: barberiaData, error: barberiaError } = await supabase
-          .from('barberias')
-          .select('id, nombre, comuna')
-          .eq('slug', barberiaSlug)
-          .maybeSingle();
+        const { data, error: portalError } = await supabase.rpc('obtener_portal_publico', {
+          p_barberia_slug: barberiaSlug,
+          p_barbero_slug: barberoSlug || null,
+        });
 
         if (!active) return;
 
-        if (barberiaError) {
-          setError('No se pudo cargar la información de la barbería.');
-          return;
-        }
-
-        if (!barberiaData) {
-          setError('Barbería no encontrada.');
-          return;
-        }
-
-        setBarberia(barberiaData);
-
-        if (barberoSlug) {
-          const { data: barberoData, error: barberoError } = await supabase
-            .from('usuarios')
-            .select('id, email')
-            .eq('barberia_id', barberiaData.id)
-            .eq('slug', barberoSlug)
-            .eq('rol', 'barbero')
-            .maybeSingle();
-
-          if (!active) return;
-
-          if (barberoError) {
-            setError('No se pudo cargar la información del barbero.');
-            return;
-          }
-
-          if (!barberoData) {
-            setError('Barbero no encontrado en esta barbería.');
-            return;
-          }
-
-          setBarbero(barberoData);
-        }
-
-        const { data: serviciosData, error: serviciosError } = await supabase
-          .from('servicios')
-          .select('id, nombre, precio')
-          .eq('barberia_id', barberiaData.id);
-
-        if (!active) return;
-
-        if (serviciosError) {
+        if (portalError) {
+          console.error('Error al cargar el portal público:', portalError);
           setError('No se pudieron cargar los servicios de la barbería.');
           return;
         }
 
-        setServicios(serviciosData || []);
+        const portal = data as unknown as PortalPublicoResponse | null;
+        if (!portal || portal.status === 'barberia_no_encontrada') {
+          setError('Barbería no encontrada.');
+          return;
+        }
+
+        if (portal.status === 'barberia_inactiva') {
+          setError('Esta barbería no está recibiendo reservas en este momento.');
+          return;
+        }
+
+        if (portal.status === 'barbero_no_encontrado') {
+          setError('Barbero no encontrado en esta barbería.');
+          return;
+        }
+
+        if (portal.status === 'barbero_inactivo') {
+          setError('Este barbero no está recibiendo reservas en este momento.');
+          return;
+        }
+
+        if (portal.status !== 'ok' || !portal.barberia || !Array.isArray(portal.servicios)) {
+          setError('No se pudo cargar el portal de reservas.');
+          return;
+        }
+
+        setBarberia(portal.barberia);
+        setBarbero(portal.barbero || null);
+        setServicios(portal.servicios);
       } catch (loadError) {
         console.error('Error al cargar el portal público:', loadError);
         if (active) {
@@ -215,22 +201,37 @@ export function PublicLandingPage() {
     setMensajeExito(null);
     setErrorReserva(null);
 
-    const cita: CitaPublicaInput = {
-      cliente: clienteNombre,
-      servicio_id: servicioSeleccionado.id,
-      fecha,
-      hora: hora.includes(':') && hora.split(':').length === 2 ? `${hora}:00` : hora,
-      barberia_id: barberia.id,
-      estado: 'Pendiente',
-      ...(barbero ? { barbero_id: barbero.id } : {}),
-    };
-
     try {
-      const { error: insertError } = await supabase.from('citas').insert([cita]);
+      const { data, error: insertError } = await supabase.rpc('crear_cita_publica', {
+        p_barberia_slug: barberiaSlug,
+        p_barbero_slug: barberoSlug || null,
+        p_servicio_id: servicioSeleccionado.id,
+        p_cliente: clienteNombre,
+        p_fecha: fecha,
+        p_hora: hora.includes(':') && hora.split(':').length === 2 ? `${hora}:00` : hora,
+      });
 
       if (insertError) {
         console.error('Error al crear la cita:', insertError);
         setErrorReserva('Hubo un error al registrar tu reserva. Inténtalo de nuevo.');
+        return;
+      }
+
+      const result = data as unknown as CitaPublicaResponse | null;
+      if (!result || result.status !== 'ok') {
+        const statusMessages: Record<string, string> = {
+          barberia_no_encontrada: 'La barbería ya no está disponible.',
+          barberia_inactiva: 'Esta barbería no está recibiendo reservas en este momento.',
+          barbero_no_disponible: 'Este barbero no está recibiendo reservas en este momento.',
+          servicio_invalido: 'El servicio seleccionado ya no está disponible.',
+          horario_no_disponible: 'Ese horario ya fue reservado. Elige otro horario.',
+          cliente_invalido: 'Ingresa un nombre válido.',
+          fecha_hora_invalida: 'Selecciona una fecha y hora válidas.',
+        };
+        setErrorReserva(
+          statusMessages[result?.status || '']
+            || 'Hubo un error al registrar tu reserva. Inténtalo de nuevo.',
+        );
         return;
       }
 
@@ -261,7 +262,7 @@ export function PublicLandingPage() {
           <p className="text-base mt-1 font-medium text-slate-600">📍 {barberia.comuna}</p>
           {barbero && (
             <p className="text-sm mt-2 font-bold text-slate-700">
-              Reserva con {barbero.email.split('@')[0]}
+              Reserva con {barbero.nombre}
             </p>
           )}
         </div>

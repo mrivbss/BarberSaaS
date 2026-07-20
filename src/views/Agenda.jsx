@@ -121,7 +121,6 @@ export function Agenda() {
   };
 
   const handleAgendar = async (e) => {
-    console.log("¡Click detectado en Agendar!");
     e.preventDefault();
     if (!cliente || !servicioId || !fecha || !hora) {
       alert('Completa los campos.');
@@ -131,8 +130,6 @@ export function Agenda() {
     const sesion = JSON.parse(localStorage.getItem('tenant_session') || '{}');
     const barberoId = sesion?.barbero_id || sesion?.id; 
     const barberiaId = sesion?.barberia_id;
-
-    console.log("Debug IDs:", { barberoId, barberiaId, sesion });
 
     if (!barberiaId || !barberoId) {
       alert('No se pudo identificar la barbería. Por favor recarga la página.');
