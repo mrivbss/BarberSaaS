@@ -67,7 +67,7 @@ export async function getUpcomingAppointments(barberiaId: string): Promise<Appoi
       fecha,
       hora,
       barbero_id,
-      usuarios (
+      usuarios:usuarios!citas_barbero_tenant_fkey (
         email
       )
     `)

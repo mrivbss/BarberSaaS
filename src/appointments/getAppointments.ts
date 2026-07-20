@@ -16,7 +16,7 @@ export const appointmentServices = {
       .from('citas')
       .select(`
         *,
-        servicios (
+        servicios:servicios!citas_servicio_tenant_fkey (
           nombre,
           precio
         )
