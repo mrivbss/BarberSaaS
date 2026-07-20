@@ -238,45 +238,25 @@ La arquitectura está orientada a una solución SaaS y constituye una base sóli
 
 # Capturas
 
-> Reemplazar por imágenes del proyecto.
+## Dashboard
 
-```text
-Dashboard
-```
+![Dashboard](./images/dashboard.png)
 
-![Dashboard](docs/images/dashboard.png)
+## Agenda
 
----
+![Agenda](./images/agenda.png)
 
-```text
-Agenda
-```
+## Servicios
 
-![Agenda](docs/images/agenda.png)
+![Servicios](./images/servicios.png)
 
----
+## Finanzas
 
-```text
-Servicios
-```
+![Finanzas](./images/finanzas.png)
 
-![Servicios](docs/images/servicios.png)
+## Reserva pública
 
----
-
-```text
-Finanzas
-```
-
-![Finanzas](docs/images/finanzas.png)
-
----
-
-```text
-Reserva Pública
-```
-
-![Reserva Pública](docs/images/public-booking.png)
+![Reserva pública](./images/public-booking.png)
 
 ---
 
