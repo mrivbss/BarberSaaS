@@ -1,4 +1,27 @@
 project_id = "barbersaas"
 
+[auth]
+site_url = "https://barber-saas-cl.vercel.app"
+additional_redirect_urls = [
+  "https://barber-saas-cl.vercel.app/auth/accept-invite",
+  "https://barber-saas-cl.vercel.app/establecer-contrasena",
+  "https://barber-saas-cl.vercel.app/set-password",
+  "http://localhost:5173/auth/accept-invite",
+  "http://localhost:5173/establecer-contrasena",
+  "http://localhost:5173/set-password",
+]
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.email]
+enable_confirmations = true
+max_frequency = "1m0s"
+otp_length = 8
+
+[storage.vector]
+enabled = false
+
 [functions.platform-admin]
 verify_jwt = true
