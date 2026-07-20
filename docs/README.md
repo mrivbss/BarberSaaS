@@ -1,5 +1,23 @@
 # BarberSaaS
 
+<p align="center">
+  <img src="./images/banner.png" alt="BarberSaaS Banner" width="100%">
+</p>
+
+<h1 align="center">✂️ BarberSaaS</h1>
+
+<p align="center">
+  Modern SaaS Platform for Multi-Tenant Barbershop Management
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react" alt="React">
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript" alt="TypeScript">
+  <img src="https://img.shields.io/badge/Vite-5-646CFF?logo=vite" alt="Vite">
+  <img src="https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase" alt="Supabase">
+  <img src="https://img.shields.io/badge/License-Proprietary-red" alt="License">
+</p>
+
 BarberSaaS es una aplicación web desarrollada para la administración de barberías bajo un modelo **SaaS multi-tenant**, donde múltiples negocios pueden operar de forma independiente sobre una misma plataforma. La aplicación permite gestionar la operación diaria de una barbería mediante un panel administrativo, ofreciendo herramientas para la administración de citas, servicios, ingresos y reservas públicas.
 
 ## La arquitectura está basada en una aplicación React desplegada como Single Page Application (SPA) que se comunica directamente con Supabase para autenticación, almacenamiento y consultas de datos, sin un servidor backend tradicional.
