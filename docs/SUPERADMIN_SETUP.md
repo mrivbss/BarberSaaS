@@ -32,9 +32,13 @@ Con Supabase CLI autenticado y enlazado al proyecto correcto:
 ```bash
 npx supabase link --project-ref TU_PROJECT_REF
 npx supabase db push
-npx supabase secrets set PUBLIC_APP_URL=https://tu-dominio.cl ALLOWED_ORIGINS=https://tu-dominio.cl
+npx supabase secrets set PUBLIC_APP_URL=https://tu-dominio.cl ALLOWED_ORIGINS=https://tu-dominio.cl,http://localhost:5173,http://127.0.0.1:5173
 npx supabase functions deploy platform-admin
 ```
+
+`ALLOWED_ORIGINS` acepta una lista separada por comas. Conserva el dominio de
+producción y agrega sólo los orígenes locales que realmente uses; no configures `*`
+en esta función administrativa.
 
 `SUPABASE_SERVICE_ROLE_KEY` es un secreto reservado del entorno de Edge Functions.
 No lo copies a Vercel, al frontend ni a una variable con prefijo `VITE_`.
