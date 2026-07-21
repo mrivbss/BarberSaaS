@@ -32,7 +32,7 @@ Con Supabase CLI autenticado y enlazado al proyecto correcto:
 ```bash
 npx supabase link --project-ref TU_PROJECT_REF
 npx supabase db push
-npx supabase secrets set PUBLIC_APP_URL=https://tu-dominio.cl ALLOWED_ORIGINS=https://tu-dominio.cl,http://localhost:5173,http://127.0.0.1:5173
+npx supabase secrets set ALLOWED_ORIGINS=https://tu-dominio.cl,http://localhost:5173,http://127.0.0.1:5173
 npx supabase functions deploy platform-admin
 ```
 
@@ -43,18 +43,18 @@ en esta función administrativa.
 `SUPABASE_SERVICE_ROLE_KEY` es un secreto reservado del entorno de Edge Functions.
 No lo copies a Vercel, al frontend ni a una variable con prefijo `VITE_`.
 
-Configura además en Supabase Auth:
+La creación administrativa usa `auth.admin.createUser` con `email_confirm: true`, por
+lo que no envía correos ni requiere confirmación. Conserva temporalmente estas rutas
+de Supabase Auth sólo mientras puedan existir invitaciones emitidas por una versión
+anterior:
 
 - Site URL: `https://tu-dominio.cl`
-- Redirect URL permitida: `https://tu-dominio.cl/auth/accept-invite`
-- Conserva temporalmente `https://tu-dominio.cl/establecer-contrasena` si todavía
-  existen invitaciones emitidas por una versión anterior.
-- SMTP de producción, si las invitaciones no deben usar el proveedor de correo de
-  prueba de Supabase.
+- Redirect heredado: `https://tu-dominio.cl/auth/accept-invite`
+- Alias heredados: `https://tu-dominio.cl/establecer-contrasena` y
+  `https://tu-dominio.cl/set-password`
 
-La plantilla **Invite user** debe enlazar `{{ .ConfirmationURL }}` para que respete
-el `redirectTo` enviado por `platform-admin`; no reemplaces ese enlace por
-`{{ .SiteURL }}`.
+No se necesita SMTP ni configurar la plantilla **Invite user** para las cuentas
+creadas por el panel actual.
 
 ## 3. Crear el único superadmin inicial
 
@@ -99,7 +99,8 @@ VITE_PUBLIC_APP_URL=https://tu-dominio.cl
 ```
 
 `vercel.json` ya reescribe todas las rutas a `index.html`, por lo que `/platform`,
-`/auth/accept-invite` y las rutas públicas anidadas funcionan al recargar.
+`/auth/accept-invite` (compatibilidad heredada) y las rutas públicas anidadas
+funcionan al recargar.
 
 Orden de corte recomendado durante una ventana de mantenimiento:
 
@@ -116,9 +117,16 @@ Orden de corte recomendado durante una ventana de mantenimiento:
   Function.
 - El superadmin puede crear una barbería, editarla y desactivarla.
 - Un slug de barbería duplicado es rechazado.
-- La invitación de un `admin` crea un perfil con el tenant actual.
-- La invitación de un `barbero` crea un slug único dentro del tenant y abre
+- La creación de un `admin` genera una cuenta confirmada y un perfil con el tenant actual.
+- La creación de un `barbero` genera una cuenta confirmada, conserva el mismo UUID
+  en Auth y `public.usuarios`, crea un slug único dentro del tenant y abre
   `/b/:barberiaSlug/:barberoSlug`.
+- Ambos roles pueden iniciar sesión inmediatamente con la contraseña inicial y no
+  se genera ningún correo de invitación o confirmación.
+- Un correo o slug duplicado se rechaza con un mensaje seguro.
+- Una contraseña de menos de ocho caracteres se rechaza en frontend y Edge Function.
+- Si falla `public.usuarios`, la Edge Function elimina la cuenta Auth recién creada;
+  si esa limpieza falla, solicita revisión administrativa.
 - Un tenant inactivo no permite login normal ni reservas públicas.
 - `/b/:barberiaSlug` conserva las reservas generales sin asignar barbero.
 - Las tablas `usuarios`, `citas` y `ganancias` no son legibles con la clave anónima.
@@ -141,3 +149,19 @@ públicas.
   tráfico o si aparece abuso.
 - El repositorio no tenía infraestructura de tests automatizados, lint ni CI. La
   matriz de RLS debe probarse también contra staging con cuentas reales de cada rol.
+
+## 8. Compatibilidad heredada y cambio de contraseña
+
+Las rutas `/auth/accept-invite`, `/establecer-contrasena` y `/set-password` y el
+componente `SetPassword` ya no participan en la creación de cuentas nuevas. Se
+conservan temporalmente para no invalidar invitaciones emitidas antes de este cambio.
+Su eliminación debe hacerse en una limpieza separada, después de confirmar que no
+queden enlaces pendientes.
+
+La aplicación no incluye todavía una página general de ajustes de contraseña. Cuando
+se implemente, el usuario autenticado puede cambiar su propia credencial sin exponerla
+al administrador mediante:
+
+```ts
+await supabase.auth.updateUser({ password: newPassword });
+```

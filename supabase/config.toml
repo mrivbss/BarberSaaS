@@ -3,6 +3,7 @@ project_id = "barbersaas"
 [auth]
 site_url = "https://barber-saas-cl.vercel.app"
 additional_redirect_urls = [
+  # Compatibilidad con invitaciones emitidas por versiones anteriores.
   "https://barber-saas-cl.vercel.app/auth/accept-invite",
   "https://barber-saas-cl.vercel.app/establecer-contrasena",
   "https://barber-saas-cl.vercel.app/set-password",

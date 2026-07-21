@@ -129,7 +129,7 @@ export function PlatformBarberias() {
           <EmptyState
             icon={Building2}
             title="Aún no hay barberías"
-            description="Crea el primer tenant para comenzar a invitar administradores y barberos."
+            description="Crea el primer tenant para comenzar a agregar administradores y barberos."
             action={
               <Link
                 to="/platform/barberias/nueva"

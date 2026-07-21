@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   ArrowLeft,
   Building2,
@@ -6,7 +6,6 @@ import {
   Clipboard,
   ExternalLink,
   Loader2,
-  Mail,
   Pencil,
   Plus,
   Power,
@@ -36,43 +35,44 @@ import { buildPublicBookingUrl, normalizeSlug, validateSlug } from '../../lib/sl
 import {
   PlatformAdminError,
   platformAdmin,
-  type InvitationDelivery,
   type PlatformBarberiaDetail as BarberiaDetail,
   type PlatformUsuario,
   type TenantUserRole,
 } from '../../services/platformAdmin';
 
-interface InviteForm {
+interface CreateUserForm {
   nombre: string;
   email: string;
   rol: TenantUserRole;
   slug: string;
+  password: string;
+  passwordConfirmation: string;
 }
 
-interface InviteErrors {
+interface CreateUserErrors {
   nombre?: string;
   email?: string;
   slug?: string;
+  password?: string;
+  passwordConfirmation?: string;
 }
 
 interface NavigationState {
   notice?: string;
-  openInvite?: boolean;
+  openCreateUser?: boolean;
 }
 
-interface GeneratedInvite {
-  email: string;
-  url: string;
-}
-
-const initialInviteForm: InviteForm = {
+const initialCreateUserForm: CreateUserForm = {
   nombre: '',
   email: '',
   rol: 'barbero',
   slug: '',
+  password: '',
+  passwordConfirmation: '',
 };
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const minimumPasswordLength = 8;
 
 const currencyFormatter = new Intl.NumberFormat('es-CL', {
   style: 'currency',
@@ -105,18 +105,19 @@ export function PlatformBarberiaDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(navigationState?.notice ?? null);
-  const [showInvite, setShowInvite] = useState(navigationState?.openInvite === true);
-  const [invite, setInvite] = useState<InviteForm>(() =>
-    navigationState?.openInvite
-      ? { ...initialInviteForm, rol: 'admin' }
-      : initialInviteForm,
+  const [showCreateUser, setShowCreateUser] = useState(navigationState?.openCreateUser === true);
+  const [createUserForm, setCreateUserForm] = useState<CreateUserForm>(() =>
+    navigationState?.openCreateUser
+      ? { ...initialCreateUserForm, rol: 'admin' }
+      : initialCreateUserForm,
   );
-  const [inviteErrors, setInviteErrors] = useState<InviteErrors>({});
+  const [createUserErrors, setCreateUserErrors] = useState<CreateUserErrors>({});
   const [slugEdited, setSlugEdited] = useState(false);
-  const [inviting, setInviting] = useState(false);
-  const [generatedInvite, setGeneratedInvite] = useState<GeneratedInvite | null>(null);
+  const [creatingUser, setCreatingUser] = useState(false);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [updatingBarberia, setUpdatingBarberia] = useState(false);
+  const createUserButtonRef = useRef<HTMLButtonElement>(null);
+  const createUserInFlight = useRef(false);
 
   const loadDetail = useCallback(async () => {
     if (!barberiaId) {
@@ -159,89 +160,85 @@ export function PlatformBarberiaDetail() {
     };
   }, [detail]);
 
-  const resetInvite = () => {
-    setInvite(initialInviteForm);
-    setInviteErrors({});
+  const closeCreateUserForm = () => {
+    setCreateUserForm(initialCreateUserForm);
+    setCreateUserErrors({});
     setSlugEdited(false);
-    setShowInvite(false);
+    setShowCreateUser(false);
+    window.requestAnimationFrame(() => createUserButtonRef.current?.focus());
   };
 
-  const validateInvite = (): boolean => {
-    const nextErrors: InviteErrors = {};
-    if (!invite.nombre.trim()) nextErrors.nombre = 'El nombre es obligatorio.';
-    if (invite.nombre.trim().length > 120) {
+  const validateCreateUser = (): boolean => {
+    const nextErrors: CreateUserErrors = {};
+    if (!createUserForm.nombre.trim()) nextErrors.nombre = 'El nombre es obligatorio.';
+    if (createUserForm.nombre.trim().length > 120) {
       nextErrors.nombre = 'Usa un máximo de 120 caracteres.';
     }
-    if (!emailPattern.test(invite.email.trim())) {
+    if (!emailPattern.test(createUserForm.email.trim())) {
       nextErrors.email = 'Ingresa un correo electrónico válido.';
     }
-    if (invite.rol === 'barbero') {
-      const slugError = validateSlug(invite.slug);
+    if (createUserForm.rol === 'barbero') {
+      const slugError = validateSlug(createUserForm.slug);
       if (slugError) nextErrors.slug = slugError;
     }
-    setInviteErrors(nextErrors);
+    if (createUserForm.password.length < minimumPasswordLength) {
+      nextErrors.password = `La contraseña debe tener al menos ${minimumPasswordLength} caracteres.`;
+    }
+    if (!createUserForm.passwordConfirmation) {
+      nextErrors.passwordConfirmation = 'Confirma la contraseña.';
+    } else if (createUserForm.password !== createUserForm.passwordConfirmation) {
+      nextErrors.passwordConfirmation = 'Las contraseñas no coinciden.';
+    }
+    setCreateUserErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
 
-  const createInvite = async (delivery: InvitationDelivery) => {
-    if (inviting || !barberiaId || !validateInvite()) return;
+  const createUser = async () => {
+    if (createUserInFlight.current || !barberiaId || !validateCreateUser()) return;
 
-    setInviting(true);
+    createUserInFlight.current = true;
+    setCreatingUser(true);
     setError(null);
     setSuccess(null);
-    setGeneratedInvite(null);
     try {
-      const result = await platformAdmin.createTenantUser(
-        {
-          barberia_id: barberiaId,
-          nombre: invite.nombre.trim(),
-          email: invite.email.trim().toLowerCase(),
-          rol: invite.rol,
-          ...(invite.rol === 'barbero' && slugEdited ? { slug: invite.slug } : {}),
-        },
-        delivery,
-      );
+      const result = await platformAdmin.createTenantUser({
+        barberia_id: barberiaId,
+        nombre: createUserForm.nombre.trim(),
+        email: createUserForm.email.trim().toLowerCase(),
+        rol: createUserForm.rol,
+        password: createUserForm.password,
+        ...(createUserForm.rol === 'barbero' && slugEdited
+          ? { slug: createUserForm.slug }
+          : {}),
+      });
       const created = result.usuario;
       setDetail((current) =>
         current ? { ...current, usuarios: [...current.usuarios, created] } : current,
       );
-      if (result.invitacion_url) {
-        setGeneratedInvite({ email: created.email, url: result.invitacion_url });
-        setSuccess(`Usuario ${created.nombre} creado correctamente. Comparte su enlace de invitación.`);
-      } else {
-        setSuccess(
-          `Usuario ${created.nombre} creado correctamente. La invitación fue enviada a ${created.email}.`,
-        );
-      }
-      resetInvite();
-    } catch (inviteError) {
-      if (inviteError instanceof PlatformAdminError) {
-        if (inviteError.code === 'duplicate_barber_slug') {
-          setInviteErrors((current) => ({ ...current, slug: inviteError.message }));
+      setSuccess('Usuario creado correctamente.');
+      closeCreateUserForm();
+    } catch (createError) {
+      if (createError instanceof PlatformAdminError) {
+        if (createError.code === 'duplicate_barber_slug') {
+          setCreateUserErrors((current) => ({ ...current, slug: createError.message }));
         }
-        if (inviteError.code === 'duplicate_email') {
-          setInviteErrors((current) => ({ ...current, email: inviteError.message }));
+        if (createError.code === 'duplicate_email') {
+          setCreateUserErrors((current) => ({ ...current, email: createError.message }));
+        }
+        if (createError.code === 'password_too_short' || createError.code === 'password_policy') {
+          setCreateUserErrors((current) => ({ ...current, password: createError.message }));
         }
       }
-      setError(errorMessage(inviteError));
+      setError(errorMessage(createError));
     } finally {
-      setInviting(false);
+      createUserInFlight.current = false;
+      setCreatingUser(false);
     }
   };
 
-  const inviteUser = (event: FormEvent<HTMLFormElement>) => {
+  const submitCreateUser = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void createInvite('link');
-  };
-
-  const copyInviteUrl = async () => {
-    if (!generatedInvite) return;
-    try {
-      await navigator.clipboard.writeText(generatedInvite.url);
-      setSuccess(`Enlace de invitación para ${generatedInvite.email} copiado al portapapeles.`);
-    } catch {
-      setError('No se pudo copiar automáticamente. Selecciona y copia el enlace mostrado.');
-    }
+    void createUser();
   };
 
   const changeUserStatus = async (user: PlatformUsuario) => {
@@ -408,26 +405,6 @@ export function PlatformBarberiaDetail() {
           </button>
         </div>
       )}
-      {generatedInvite && (
-        <div role="status" className="space-y-3 rounded-xl border-2 border-amber-600 bg-amber-50 p-4 text-sm text-slate-900">
-          <div>
-            <p className="font-black">Enlace de activación listo</p>
-            <p className="mt-1 font-medium text-slate-600">
-              Envíalo a {generatedInvite.email}. Es una credencial de un solo uso; no lo publiques.
-            </p>
-          </div>
-          <code className="block break-all rounded-lg border border-amber-300 bg-white p-3 text-xs font-semibold">
-            {generatedInvite.url}
-          </code>
-          <div className="flex justify-end">
-            <Button type="button" size="sm" onClick={() => void copyInviteUrl()}>
-              <Clipboard className="h-4 w-4" />
-              Copiar enlace de invitación
-            </Button>
-          </div>
-        </div>
-      )}
-
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <StatCard icon={Users} value={summary.users} label="Usuarios" subtext="Perfiles del tenant" />
         <StatCard icon={Scissors} value={summary.barbers} label="Barberos" subtext="Enlaces individuales" />
@@ -542,52 +519,60 @@ export function PlatformBarberiaDetail() {
             </p>
           </div>
           <Button
+            ref={createUserButtonRef}
             type="button"
             disabled={!barberia.activo}
             onClick={() => {
-              setShowInvite((current) => !current);
+              setShowCreateUser(true);
               setError(null);
             }}
             className="bg-slate-950 text-white"
           >
             <Plus className="h-4 w-4" />
-            Invitar usuario
+            Crear usuario
           </Button>
         </div>
 
         {!barberia.activo && (
           <p className="text-xs font-semibold text-amber-800">
-            Reactiva la barbería para poder enviar nuevas invitaciones.
+            Reactiva la barbería para poder crear nuevos usuarios.
           </p>
         )}
 
-        {showInvite && (
+        {showCreateUser && (
           <Card padding="lg" className="border-2 border-slate-900 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
-                <h3 className="font-black text-slate-950">Invitar usuario</h3>
+                <h3 className="font-black text-slate-950">Crear usuario</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Genera un enlace para compartir de inmediato. El envío directo por correo requiere
-                  configurar un proveedor SMTP propio.
+                  Crea las credenciales de acceso para este usuario en {barberia.nombre}.
                 </p>
               </div>
-              <button type="button" onClick={resetInvite} aria-label="Cerrar formulario">
+              <button
+                type="button"
+                onClick={closeCreateUserForm}
+                aria-label="Cerrar formulario"
+                disabled={creatingUser}
+                className="disabled:cursor-not-allowed disabled:opacity-50"
+              >
                 <X className="h-5 w-5 text-slate-500" />
               </button>
             </div>
 
-            <form onSubmit={inviteUser} noValidate className="space-y-5">
+            <form onSubmit={submitCreateUser} noValidate className="space-y-5">
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <Input
                   label="Nombre"
-                  value={invite.nombre}
+                  value={createUserForm.nombre}
                   maxLength={120}
                   autoComplete="name"
                   placeholder="Nombre completo"
-                  error={inviteErrors.nombre}
+                  error={createUserErrors.nombre}
+                  autoFocus
+                  disabled={creatingUser}
                   onChange={(event) => {
                     const nextName = event.target.value;
-                    setInvite((current) => ({
+                    setCreateUserForm((current) => ({
                       ...current,
                       nombre: nextName,
                       slug:
@@ -595,23 +580,24 @@ export function PlatformBarberiaDetail() {
                           ? normalizeSlug(nextName)
                           : current.slug,
                     }));
-                    if (inviteErrors.nombre) {
-                      setInviteErrors((current) => ({ ...current, nombre: undefined }));
+                    if (createUserErrors.nombre) {
+                      setCreateUserErrors((current) => ({ ...current, nombre: undefined }));
                     }
                   }}
                 />
                 <Input
                   label="Correo electrónico"
                   type="email"
-                  value={invite.email}
+                  value={createUserForm.email}
                   maxLength={254}
                   autoComplete="email"
                   placeholder="persona@ejemplo.cl"
-                  error={inviteErrors.email}
+                  error={createUserErrors.email}
+                  disabled={creatingUser}
                   onChange={(event) => {
-                    setInvite((current) => ({ ...current, email: event.target.value }));
-                    if (inviteErrors.email) {
-                      setInviteErrors((current) => ({ ...current, email: undefined }));
+                    setCreateUserForm((current) => ({ ...current, email: event.target.value }));
+                    if (createUserErrors.email) {
+                      setCreateUserErrors((current) => ({ ...current, email: undefined }));
                     }
                   }}
                 />
@@ -624,18 +610,19 @@ export function PlatformBarberiaDetail() {
                   </label>
                   <select
                     id="tenant-role"
-                    value={invite.rol}
+                    value={createUserForm.rol}
+                    disabled={creatingUser}
                     onChange={(event) => {
                       const rol = event.target.value as TenantUserRole;
-                      setInvite((current) => ({
+                      setCreateUserForm((current) => ({
                         ...current,
                         rol,
                         slug: rol === 'barbero' ? normalizeSlug(current.nombre) : '',
                       }));
                       setSlugEdited(false);
-                      setInviteErrors((current) => ({ ...current, slug: undefined }));
+                      setCreateUserErrors((current) => ({ ...current, slug: undefined }));
                     }}
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 shadow-input outline-none focus:border-slate-950 focus:shadow-input-focus"
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 shadow-input outline-none focus:border-slate-950 focus:shadow-input-focus disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <option value="barbero">Barbero</option>
                     <option value="admin">Administrador</option>
@@ -645,54 +632,100 @@ export function PlatformBarberiaDetail() {
                   </p>
                 </div>
 
-                {invite.rol === 'barbero' && (
+                {createUserForm.rol === 'barbero' && (
                   <Input
                     label="Slug del barbero"
-                    value={invite.slug}
+                    value={createUserForm.slug}
                     maxLength={120}
                     spellCheck={false}
                     autoCapitalize="none"
                     placeholder="nombre-barbero"
-                    error={inviteErrors.slug}
+                    error={createUserErrors.slug}
+                    disabled={creatingUser}
                     onChange={(event) => {
-                      setInvite((current) => ({
+                      setCreateUserForm((current) => ({
                         ...current,
                         slug: normalizeSlug(event.target.value),
                       }));
                       setSlugEdited(true);
-                      if (inviteErrors.slug) {
-                        setInviteErrors((current) => ({ ...current, slug: undefined }));
+                      if (createUserErrors.slug) {
+                        setCreateUserErrors((current) => ({ ...current, slug: undefined }));
                       }
                     }}
                   />
                 )}
               </div>
 
-              {invite.rol === 'barbero' && invite.slug && (
+              {createUserForm.rol === 'barbero' && createUserForm.slug && (
                 <p className="rounded-lg bg-slate-50 p-3 text-xs font-medium text-slate-600">
                   Enlace individual:{' '}
                   <span className="break-all font-mono font-bold text-slate-900">
-                    {buildPublicBookingUrl(barberia.slug, invite.slug)}
+                    {buildPublicBookingUrl(barberia.slug, createUserForm.slug)}
                   </span>
                 </p>
               )}
 
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div>
+                  <Input
+                    id="initial-password"
+                    label="Contraseña inicial"
+                    type="password"
+                    value={createUserForm.password}
+                    minLength={minimumPasswordLength}
+                    autoComplete="new-password"
+                    required
+                    aria-describedby="initial-password-requirements"
+                    error={createUserErrors.password}
+                    disabled={creatingUser}
+                    onChange={(event) => {
+                      setCreateUserForm((current) => ({ ...current, password: event.target.value }));
+                      if (createUserErrors.password) {
+                        setCreateUserErrors((current) => ({ ...current, password: undefined }));
+                      }
+                    }}
+                  />
+                  <p id="initial-password-requirements" className="mt-1 text-[11px] text-slate-500">
+                    Usa al menos {minimumPasswordLength} caracteres y entrégala al usuario por un canal seguro.
+                  </p>
+                </div>
+                <Input
+                  id="initial-password-confirmation"
+                  label="Confirmar contraseña"
+                  type="password"
+                  value={createUserForm.passwordConfirmation}
+                  minLength={minimumPasswordLength}
+                  autoComplete="new-password"
+                  required
+                  error={createUserErrors.passwordConfirmation}
+                  disabled={creatingUser}
+                  onChange={(event) => {
+                    setCreateUserForm((current) => ({
+                      ...current,
+                      passwordConfirmation: event.target.value,
+                    }));
+                    if (createUserErrors.passwordConfirmation) {
+                      setCreateUserErrors((current) => ({
+                        ...current,
+                        passwordConfirmation: undefined,
+                      }));
+                    }
+                  }}
+                />
+              </div>
+
               <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
-                <Button type="button" variant="ghost" onClick={resetInvite}>
-                  Cancelar
-                </Button>
                 <Button
                   type="button"
-                  variant="secondary"
-                  disabled={inviting}
-                  onClick={() => void createInvite('email')}
+                  variant="ghost"
+                  onClick={closeCreateUserForm}
+                  disabled={creatingUser}
                 >
-                  <Mail className="h-4 w-4" />
-                  Enviar por correo
+                  Cancelar
                 </Button>
-                <Button type="submit" disabled={inviting} className="bg-slate-950 text-white">
-                  {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clipboard className="h-4 w-4" />}
-                  {inviting ? 'Creando invitación...' : 'Generar enlace de invitación'}
+                <Button type="submit" disabled={creatingUser} className="bg-slate-950 text-white">
+                  {creatingUser ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  {creatingUser ? 'Creando usuario...' : 'Crear usuario'}
                 </Button>
               </div>
             </form>
@@ -704,7 +737,7 @@ export function PlatformBarberiaDetail() {
             <EmptyState
               icon={Users}
               title="Esta barbería aún no tiene usuarios"
-              description="Invita primero al administrador o agrega un barbero."
+              description="Crea primero al administrador o agrega un barbero."
             />
           </div>
         ) : (

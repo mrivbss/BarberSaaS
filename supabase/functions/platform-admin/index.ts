@@ -2,7 +2,6 @@ import { createClient, SupabaseClient } from 'npm:@supabase/supabase-js@2.108.2'
 
 type JsonRecord = Record<string, unknown>;
 type TenantRole = 'admin' | 'barbero';
-type InvitationDelivery = 'email' | 'link';
 
 interface BarberiaRow {
   id: string;
@@ -39,6 +38,7 @@ class ApiError extends Error {
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const minimumPasswordLength = 8;
 
 function normalizeSlug(value: string): string {
   return value
@@ -90,8 +90,9 @@ function optionalSlug(body: JsonRecord, key: string): string | null {
     throw new ApiError(400, 'invalid_slug', 'El slug no es válido.');
   }
 
-  const cleanValue = value.trim();
-  if (cleanValue.length > 120 || !slugPattern.test(cleanValue)) {
+  const trimmedValue = value.trim();
+  const cleanValue = normalizeSlug(trimmedValue);
+  if (trimmedValue.length > 120 || !cleanValue || cleanValue.length > 120 || !slugPattern.test(cleanValue)) {
     throw new ApiError(
       400,
       'invalid_slug',
@@ -101,19 +102,48 @@ function optionalSlug(body: JsonRecord, key: string): string | null {
   return cleanValue;
 }
 
+async function removeAuthUserAfterProfileFailure(
+  admin: SupabaseClient,
+  authUserId: string,
+): Promise<void> {
+  let cleanupFailed = false;
+  let cleanupErrorCode: string | undefined;
+  try {
+    const cleanup = await admin.auth.admin.deleteUser(authUserId);
+    cleanupFailed = Boolean(cleanup.error);
+    cleanupErrorCode = cleanup.error?.code ?? (cleanup.error ? 'unknown_error' : undefined);
+  } catch {
+    cleanupFailed = true;
+    cleanupErrorCode = 'network_error';
+  }
+
+  if (cleanupFailed) {
+    console.error('platform-admin cleanup failed', { code: cleanupErrorCode });
+    throw new ApiError(
+      500,
+      'profile_cleanup_failed',
+      'No se pudo completar la creación del usuario. Se requiere revisión administrativa.',
+    );
+  }
+}
+
+function requiredPassword(body: JsonRecord): string {
+  const value = body.password;
+  if (typeof value !== 'string' || value.length < minimumPasswordLength) {
+    throw new ApiError(
+      400,
+      'password_too_short',
+      `La contraseña debe tener al menos ${minimumPasswordLength} caracteres.`,
+    );
+  }
+  return value;
+}
+
 function requestedBoolean(body: JsonRecord, key: string): boolean {
   if (typeof body[key] !== 'boolean') {
     throw new ApiError(400, 'invalid_input', 'El estado solicitado no es válido.');
   }
   return body[key] as boolean;
-}
-
-function invitationDelivery(body: JsonRecord): InvitationDelivery {
-  const value = body.delivery ?? 'email';
-  if (value !== 'email' && value !== 'link') {
-    throw new ApiError(400, 'invalid_delivery', 'El método de invitación no es válido.');
-  }
-  return value;
 }
 
 function responseHeaders(request: Request): { allowed: boolean; headers: HeadersInit } {
@@ -136,23 +166,6 @@ function responseHeaders(request: Request): { allowed: boolean; headers: Headers
       'Content-Type': 'application/json; charset=utf-8',
     },
   };
-}
-
-function getPublicAppUrl(): string {
-  const configuredUrl = Deno.env.get('PUBLIC_APP_URL')?.trim();
-  if (!configuredUrl) {
-    throw new ApiError(500, 'server_configuration', 'La URL pública de invitaciones no está configurada.');
-  }
-
-  try {
-    const url = new URL(configuredUrl);
-    if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.username || url.password) {
-      throw new Error('invalid public URL');
-    }
-    return url.origin;
-  } catch {
-    throw new ApiError(500, 'server_configuration', 'La URL pública de invitaciones no es válida.');
-  }
 }
 
 function jsonResponse(request: Request, status: number, payload: JsonRecord): Response {
@@ -407,7 +420,7 @@ async function createTenantUser(admin: SupabaseClient, body: JsonRecord): Promis
     throw new ApiError(400, 'invalid_role', 'Sólo se pueden crear administradores o barberos.');
   }
   const rol: TenantRole = roleValue;
-  const delivery = invitationDelivery(body);
+  let password = requiredPassword(body);
 
   const { data: duplicateProfile, error: duplicateError } = await admin
     .from('usuarios')
@@ -418,7 +431,7 @@ async function createTenantUser(admin: SupabaseClient, body: JsonRecord): Promis
     throw new ApiError(500, 'email_lookup_failed', 'No se pudo validar el correo.');
   }
   if (duplicateProfile?.length) {
-    throw new ApiError(409, 'duplicate_email', 'Ya existe un usuario con ese correo.');
+    throw new ApiError(409, 'duplicate_email', 'Ya existe una cuenta asociada a este correo.');
   }
 
   if (rol === 'admin') {
@@ -445,100 +458,100 @@ async function createTenantUser(admin: SupabaseClient, body: JsonRecord): Promis
     throw new ApiError(409, 'duplicate_barber_slug', 'Ese slug ya está en uso dentro de la barbería.');
   }
 
-  const publicAppUrl = getPublicAppUrl();
-  const redirectTo = `${publicAppUrl}/auth/accept-invite`;
-  let authUserId: string;
-  let invitationUrl: string | null = null;
-
-  if (delivery === 'link') {
-    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-      type: 'invite',
-      email,
-      options: {
-        data: { nombre },
-        redirectTo,
-      },
-    });
-
-    if (linkError || !linkData.user || !linkData.properties?.action_link) {
-      const duplicate = linkError?.code === 'email_exists'
-        || linkError?.code === 'user_already_exists'
-        || linkError?.status === 422;
+  const authResult = await (async () => {
+    try {
+      return await admin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          nombre,
+          rol,
+          barberia_id: barberiaId,
+        },
+      });
+    } catch {
       throw new ApiError(
-        duplicate ? 409 : 502,
-        duplicate ? 'duplicate_email' : 'auth_invite_link_failed',
-        duplicate
-          ? 'Ya existe una cuenta Auth con ese correo.'
-          : 'No se pudo generar el enlace de invitación. Inténtalo nuevamente.',
+        502,
+        'auth_create_failed',
+        'No fue posible conectar con el servicio de autenticación. Inténtalo nuevamente.',
       );
+    } finally {
+      password = '';
+      body.password = undefined;
     }
+  })();
 
-    authUserId = linkData.user.id;
-    invitationUrl = linkData.properties.action_link;
-  } else {
-    const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
-      email,
-      { data: { nombre }, redirectTo },
+  if (authResult.error || !authResult.data.user) {
+    const code = authResult.error?.code;
+    const message = authResult.error?.message.toLowerCase() ?? '';
+    const duplicate = code === 'email_exists'
+      || code === 'user_already_exists'
+      || message.includes('already been registered')
+      || message.includes('already exists');
+    const passwordRejected = code === 'weak_password'
+      || code === 'password_too_short'
+      || message.includes('password');
+
+    throw new ApiError(
+      duplicate ? 409 : passwordRejected ? 400 : 502,
+      duplicate ? 'duplicate_email' : passwordRejected ? 'password_policy' : 'auth_create_failed',
+      duplicate
+        ? 'Ya existe una cuenta asociada a este correo.'
+        : passwordRejected
+          ? 'La contraseña no cumple la política de seguridad configurada.'
+          : 'No se pudo crear la cuenta de acceso. Inténtalo nuevamente.',
     );
-    if (inviteError || !inviteData.user) {
-      const duplicate = inviteError?.code === 'email_exists'
-        || inviteError?.code === 'user_already_exists'
-        || inviteError?.message.toLowerCase().includes('already')
-        || inviteError?.status === 422;
-      const emailUnavailable = inviteError?.code === 'email_address_not_authorized'
-        || inviteError?.code === 'over_email_send_rate_limit';
-      throw new ApiError(
-        duplicate ? 409 : emailUnavailable ? 503 : 502,
-        duplicate
-          ? 'duplicate_email'
-          : emailUnavailable
-            ? 'email_delivery_unavailable'
-            : 'auth_invite_failed',
-        duplicate
-          ? 'Ya existe una cuenta Auth con ese correo.'
-          : emailUnavailable
-            ? 'El correo de prueba de Supabase no puede enviar esta invitación. Genera un enlace para compartirlo directamente.'
-            : 'No se pudo enviar la invitación. Inténtalo nuevamente.',
-      );
-    }
-
-    authUserId = inviteData.user.id;
   }
-  const { data: profile, error: profileError } = await admin
-    .from('usuarios')
-    .insert({
-      id: authUserId,
-      nombre,
-      email,
-      rol,
-      barberia_id: barberiaId,
-      slug,
-      activo: true,
-    })
-    .select('id,nombre,email,rol,barberia_id,slug,activo,creado_en,actualizado_en')
-    .single();
 
-  if (profileError) {
-    const cleanup = await admin.auth.admin.deleteUser(authUserId);
-    if (cleanup.error) {
-      console.error('platform-admin cleanup failed', { code: cleanup.error.code });
+  const authUserId = authResult.data.user.id;
+  const profileResult = await (async () => {
+    try {
+      return await admin
+        .from('usuarios')
+        .insert({
+          id: authUserId,
+          nombre,
+          email,
+          rol,
+          barberia_id: barberiaId,
+          slug,
+          activo: true,
+        })
+        .select('id,nombre,email,rol,barberia_id,slug,activo,creado_en,actualizado_en')
+        .single();
+    } catch {
+      await removeAuthUserAfterProfileFailure(admin, authUserId);
       throw new ApiError(
         500,
-        'profile_cleanup_failed',
-        'No se pudo completar la creación del usuario. Se requiere revisión administrativa.',
+        'profile_create_failed',
+        'No se pudo crear el perfil; la cuenta temporal fue eliminada.',
       );
     }
+  })();
+  const { data: profile, error: profileError } = profileResult;
 
-    if (profileError.code === '23505') {
-      throw new ApiError(409, 'duplicate_profile', 'El correo o slug ya está registrado.');
+  if (profileError || !profile) {
+    await removeAuthUserAfterProfileFailure(admin, authUserId);
+
+    if (profileError?.code === '23505') {
+      const conflict = profileError.message.toLowerCase();
+      if (conflict.includes('usuarios_email')) {
+        throw new ApiError(409, 'duplicate_email', 'Ya existe una cuenta asociada a este correo.');
+      }
+      if (conflict.includes('usuarios_barbero_slug')) {
+        throw new ApiError(409, 'duplicate_barber_slug', 'El slug seleccionado ya está siendo utilizado.');
+      }
+      if (conflict.includes('usuarios_admin_activo')) {
+        throw new ApiError(409, 'admin_exists', 'La barbería ya tiene un administrador activo.');
+      }
+      throw new ApiError(409, 'duplicate_profile', 'Ya existe un perfil con esos datos.');
     }
     throw new ApiError(500, 'profile_create_failed', 'No se pudo crear el perfil; la cuenta temporal fue eliminada.');
   }
 
   return {
     usuario: profile,
-    invitacion_enviada: delivery === 'email',
-    invitacion_url: invitationUrl,
   };
 }
 

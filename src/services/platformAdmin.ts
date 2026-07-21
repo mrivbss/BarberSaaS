@@ -58,14 +58,11 @@ export interface CreateTenantUserInput {
   email: string;
   rol: TenantUserRole;
   slug?: string;
+  password: string;
 }
-
-export type InvitationDelivery = 'email' | 'link';
 
 export interface CreateTenantUserResult {
   usuario: PlatformUsuario;
-  invitacion_enviada: boolean;
-  invitacion_url: string | null;
 }
 
 interface PlatformEnvelope<T> {
@@ -193,14 +190,10 @@ export const platformAdmin = {
     return result.barberia;
   },
 
-  createTenantUser(
-    input: CreateTenantUserInput,
-    delivery: InvitationDelivery = 'link',
-  ): Promise<CreateTenantUserResult> {
+  createTenantUser(input: CreateTenantUserInput): Promise<CreateTenantUserResult> {
     return invokePlatformAdmin<CreateTenantUserResult>({
       action: 'crear_usuario',
       ...input,
-      delivery,
     });
   },
 

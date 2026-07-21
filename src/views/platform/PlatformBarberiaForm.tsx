@@ -85,8 +85,8 @@ export function PlatformBarberiaForm() {
         state: {
           notice: barberiaId
             ? 'La barbería se actualizó correctamente.'
-            : 'La barbería fue creada. Ya puedes invitar a su primer administrador.',
-          openInvite: !barberiaId,
+            : 'La barbería fue creada. Ya puedes crear a su primer administrador.',
+          openCreateUser: !barberiaId,
         },
       });
     } catch (saveError) {
@@ -128,7 +128,7 @@ export function PlatformBarberiaForm() {
         subtitle={
           editing
             ? 'Actualiza la información pública y operativa del tenant.'
-            : 'Crea el tenant antes de invitar a sus administradores y barberos.'
+            : 'Crea el tenant antes de agregar a sus administradores y barberos.'
         }
         className="mb-0"
       />
