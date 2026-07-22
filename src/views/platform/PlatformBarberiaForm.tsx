@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ArrowLeft, Building2, ExternalLink, Loader2, Save } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button, Card, Input, PageHeader } from '../../components/ui';
+import { LoadingState } from '../../components/platform/polish';
 import { buildPublicBookingUrl, normalizeSlug, validateSlug } from '../../lib/slug';
+import { useMountedRef } from '../../hooks/useMountedRef';
 import { PlatformAdminError, platformAdmin } from '../../services/platformAdmin';
 
 interface FieldErrors {
@@ -18,6 +20,7 @@ function messageFromError(error: unknown): string {
 }
 
 export function PlatformBarberiaForm() {
+  const mountedRef = useMountedRef();
   const { barberiaId } = useParams<{ barberiaId: string }>();
   const editing = Boolean(barberiaId);
   const navigate = useNavigate();
@@ -36,16 +39,17 @@ export function PlatformBarberiaForm() {
     setError(null);
     try {
       const detail = await platformAdmin.getBarberia(barberiaId);
+      if (!mountedRef.current) return;
       setNombre(detail.barberia.nombre);
       setComuna(detail.barberia.comuna);
       setSlug(detail.barberia.slug);
       setSlugEdited(true);
     } catch (loadError) {
-      setError(messageFromError(loadError));
+      if (mountedRef.current) setError(messageFromError(loadError));
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  }, [barberiaId]);
+  }, [barberiaId, mountedRef]);
 
   useEffect(() => {
     document.title = `${editing ? 'Editar' : 'Nueva'} barbería | BarberSaaS`;
@@ -80,6 +84,7 @@ export function PlatformBarberiaForm() {
         ? await platformAdmin.updateBarberia(barberiaId, input)
         : await platformAdmin.createBarberia(input);
 
+      if (!mountedRef.current) return;
       navigate(`/platform/barberias/${saved.id}`, {
         replace: true,
         state: {
@@ -90,6 +95,7 @@ export function PlatformBarberiaForm() {
         },
       });
     } catch (saveError) {
+      if (!mountedRef.current) return;
       if (
         saveError instanceof PlatformAdminError &&
         saveError.code === 'duplicate_barberia_slug'
@@ -98,17 +104,14 @@ export function PlatformBarberiaForm() {
       }
       setError(messageFromError(saveError));
     } finally {
-      setSaving(false);
+      if (mountedRef.current) setSaving(false);
     }
   };
 
   if (loading) {
     return (
-      <div className="flex min-h-[70vh] items-center justify-center p-8" role="status">
-        <div className="flex items-center gap-3 text-sm font-bold text-slate-600">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          Cargando barbería...
-        </div>
+      <div className="platform-page-loading">
+        <LoadingState label="Cargando configuración de la barbería" />
       </div>
     );
   }
@@ -150,7 +153,12 @@ export function PlatformBarberiaForm() {
 
       {(!editing || nombre) && (
         <Card padding="lg" className="border-2 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
-          <form onSubmit={(event) => void handleSubmit(event)} noValidate className="space-y-6">
+          <form
+            onSubmit={(event) => void handleSubmit(event)}
+            noValidate
+            aria-busy={saving}
+            className={`space-y-6${saving ? ' platform-form-is-saving' : ''}`}
+          >
             <div className="flex items-start gap-3 border-b border-slate-200 pb-5">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-slate-950">
                 <Building2 className="h-5 w-5" />

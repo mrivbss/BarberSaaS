@@ -1,17 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
   Building2,
   ExternalLink,
   Eye,
+  Layers3,
   Pencil,
   Plus,
   Power,
   RefreshCw,
   Scissors,
+  ShieldCheck,
   Users,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { buildPublicBookingUrl } from '../../lib/slug';
+import { useMountedRef } from '../../hooks/useMountedRef';
 import {
   PlatformAdminError,
   platformAdmin,
@@ -21,7 +25,6 @@ import {
   Badge,
   Button,
   EmptyState,
-  PageHeader,
   Table,
   TableBody,
   TableCell,
@@ -30,6 +33,7 @@ import {
   TableRow,
   TableSkeleton,
 } from '../../components/ui';
+import { ConfirmDialog, PlatformToast } from '../../components/platform/polish';
 
 function errorMessage(error: unknown): string {
   return error instanceof PlatformAdminError || error instanceof Error
@@ -37,24 +41,150 @@ function errorMessage(error: unknown): string {
     : 'No se pudieron cargar las barberías.';
 }
 
+interface BarberiaRowProps {
+  barberia: PlatformBarberiaSummary;
+  updating: boolean;
+  onRequestStatusChange: (barberia: PlatformBarberiaSummary) => void;
+}
+
+const PlatformBarberiaRow = memo(function PlatformBarberiaRow({
+  barberia,
+  updating,
+  onRequestStatusChange,
+}: BarberiaRowProps) {
+  return (
+    <TableRow>
+      <TableCell>
+        <div className="platform-directory-tenant">
+          <span className="platform-directory-tenant__mark" aria-hidden="true">
+            <Building2 />
+          </span>
+          <span className="platform-directory-tenant__copy">
+            <Link to={`/platform/barberias/${barberia.id}`}>{barberia.nombre}</Link>
+            <small>{barberia.comuna}</small>
+          </span>
+        </div>
+      </TableCell>
+      <TableCell>
+        <code className="platform-directory-slug">
+          /{barberia.slug}
+        </code>
+      </TableCell>
+      <TableCell>
+        <Badge variant={barberia.activo ? 'success' : 'warning'}>
+          {barberia.activo ? 'Activa' : 'Inactiva'}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-center font-mono font-black text-slate-900">
+        <span className="inline-flex items-center gap-1.5">
+          <Users className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+          {barberia.usuarios_count}
+        </span>
+      </TableCell>
+      <TableCell className="text-center font-mono font-black text-slate-900">
+        <span className="inline-flex items-center gap-1.5">
+          <Scissors className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+          {barberia.barberos_count}
+        </span>
+      </TableCell>
+      <TableCell className="text-center font-mono font-black text-slate-900">
+        {barberia.servicios_count}
+      </TableCell>
+      <TableCell>
+        <div className="platform-directory-actions">
+          <a
+            href={buildPublicBookingUrl(barberia.slug)}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-950"
+            title="Abrir portal público"
+            aria-label={`Abrir portal público de ${barberia.nombre}`}
+          >
+            <ExternalLink className="h-4 w-4" aria-hidden="true" />
+          </a>
+          <Link
+            to={`/platform/barberias/${barberia.id}`}
+            className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-950"
+            title="Ver detalle"
+            aria-label={`Ver detalle de ${barberia.nombre}`}
+          >
+            <Eye className="h-4 w-4" aria-hidden="true" />
+          </Link>
+          <Link
+            to={`/platform/barberias/${barberia.id}/editar`}
+            className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-950"
+            title="Editar"
+            aria-label={`Editar ${barberia.nombre}`}
+          >
+            <Pencil className="h-4 w-4" aria-hidden="true" />
+          </Link>
+          <button
+            type="button"
+            onClick={() => onRequestStatusChange(barberia)}
+            disabled={updating}
+            className={
+              barberia.activo
+                ? 'rounded-lg p-2 text-red-700 transition-colors hover:bg-red-50 disabled:opacity-40'
+                : 'rounded-lg p-2 text-emerald-700 transition-colors hover:bg-emerald-50 disabled:opacity-40'
+            }
+            title={barberia.activo ? 'Desactivar' : 'Reactivar'}
+            aria-label={`${barberia.activo ? 'Desactivar' : 'Reactivar'} ${barberia.nombre}`}
+          >
+            {updating ? (
+              <RefreshCw className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Power className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+});
+
 export function PlatformBarberias() {
+  const mountedRef = useMountedRef();
   const [barberias, setBarberias] = useState<PlatformBarberiaSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [pendingBarberia, setPendingBarberia] = useState<PlatformBarberiaSummary | null>(null);
+
+  const requestStatusChange = useCallback((barberia: PlatformBarberiaSummary) => {
+    setPendingBarberia(barberia);
+  }, []);
+
+  const successToast = useMemo(
+    () => (success ? { id: 1, tone: 'success' as const, message: success } : null),
+    [success],
+  );
+
+  const directoryMetrics = useMemo(
+    () => ({
+      total: barberias.length,
+      active: barberias.filter((barberia) => barberia.activo).length,
+      users: barberias.reduce((total, barberia) => total + barberia.usuarios_count, 0),
+      barbers: barberias.reduce((total, barberia) => total + barberia.barberos_count, 0),
+      services: barberias.reduce((total, barberia) => total + barberia.servicios_count, 0),
+    }),
+    [barberias],
+  );
+
+  const dismissSuccess = useCallback(() => setSuccess(null), []);
 
   const loadBarberias = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setBarberias(await platformAdmin.listBarberias());
+      const result = await platformAdmin.listBarberias();
+      if (mountedRef.current) setBarberias(result);
     } catch (loadError) {
-      setError(errorMessage(loadError));
+      if (mountedRef.current) setError(errorMessage(loadError));
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  }, []);
+  }, [mountedRef]);
 
   useEffect(() => {
     document.title = 'Barberías | BarberSaaS';
@@ -63,21 +193,13 @@ export function PlatformBarberias() {
 
   const changeStatus = async (barberia: PlatformBarberiaSummary) => {
     const nextStatus = !barberia.activo;
-    const verb = nextStatus ? 'reactivar' : 'desactivar';
-    const confirmed = window.confirm(
-      `¿Confirmas que deseas ${verb} “${barberia.nombre}”?${
-        nextStatus
-          ? ''
-          : ' Sus usuarios no podrán iniciar sesión y su portal público quedará inactivo.'
-      }`,
-    );
-    if (!confirmed) return;
 
     setUpdatingId(barberia.id);
     setError(null);
     setSuccess(null);
     try {
       const updated = await platformAdmin.setBarberiaActive(barberia.id, nextStatus);
+      if (!mountedRef.current) return;
       setBarberias((current) =>
         current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)),
       );
@@ -85,31 +207,58 @@ export function PlatformBarberias() {
         `${barberia.nombre} fue ${nextStatus ? 'reactivada' : 'desactivada'} correctamente.`,
       );
     } catch (statusError) {
-      setError(errorMessage(statusError));
+      if (mountedRef.current) setError(errorMessage(statusError));
     } finally {
-      setUpdatingId(null);
+      if (mountedRef.current) {
+        setUpdatingId(null);
+        setPendingBarberia(null);
+      }
     }
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-5 sm:p-8 lg:p-10">
-      <PageHeader
-        title="Barberías"
-        subtitle="Administra los tenants, sus accesos y portales públicos."
-        action={
-          <Link
-            to="/platform/barberias/nueva"
-            className="inline-flex items-center gap-2 rounded-xl border-2 border-slate-900 bg-amber-400 px-4 py-2.5 text-sm font-black text-slate-950 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)] transition-all hover:-translate-y-0.5 hover:bg-amber-300"
-          >
-            <Plus className="h-4 w-4" strokeWidth={3} />
-            Nueva barbería
+    <div className="platform-directory-page">
+      <section className="platform-directory-hero" aria-labelledby="directory-title">
+        <div className="platform-directory-hero__ambient" aria-hidden="true" />
+        <div className="platform-directory-hero__copy">
+          <span className="platform-directory-eyebrow">
+            <Activity aria-hidden="true" /> Directorio operativo
+          </span>
+          <h1 id="directory-title">Barberías</h1>
+          <p>
+            Administra los tenants, sus accesos y portales públicos desde una sola superficie.
+          </p>
+          <Link to="/platform/barberias/nueva" className="platform-directory-create">
+            <Plus aria-hidden="true" /> Nueva barbería
           </Link>
-        }
-        className="mb-0"
-      />
+        </div>
+
+        <div className="platform-directory-metrics" aria-busy={loading} aria-label="Resumen del directorio">
+          <article>
+            <span><Building2 aria-hidden="true" /></span>
+            <div><small>Tenants</small><strong>{loading ? '—' : directoryMetrics.total}</strong></div>
+          </article>
+          <article>
+            <span><ShieldCheck aria-hidden="true" /></span>
+            <div><small>Operativos</small><strong>{loading ? '—' : directoryMetrics.active}</strong></div>
+          </article>
+          <article>
+            <span><Users aria-hidden="true" /></span>
+            <div>
+              <small>Usuarios</small>
+              <strong>{loading ? '—' : directoryMetrics.users}</strong>
+              <em>{loading ? 'Sincronizando' : `${directoryMetrics.barbers} barberos`}</em>
+            </div>
+          </article>
+          <article>
+            <span><Layers3 aria-hidden="true" /></span>
+            <div><small>Servicios</small><strong>{loading ? '—' : directoryMetrics.services}</strong></div>
+          </article>
+        </div>
+      </section>
 
       {error && (
-        <div role="alert" className="flex flex-col gap-3 rounded-xl border-2 border-red-900 bg-red-50 p-4 text-sm font-semibold text-red-900 sm:flex-row sm:items-center sm:justify-between">
+        <div role="alert" className="platform-directory-alert">
           <span>{error}</span>
           <Button type="button" size="sm" variant="danger" onClick={() => void loadBarberias()}>
             <RefreshCw className="h-4 w-4" />
@@ -118,140 +267,91 @@ export function PlatformBarberias() {
         </div>
       )}
 
-      {success && (
-        <div role="status" className="rounded-xl border-2 border-emerald-800 bg-emerald-50 p-4 text-sm font-semibold text-emerald-900">
-          {success}
-        </div>
-      )}
+      <PlatformToast
+        toast={successToast}
+        onDismiss={dismissSuccess}
+      />
 
-      {!loading && !error && barberias.length === 0 ? (
-        <div className="rounded-xl border-2 border-slate-900 bg-white shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
-          <EmptyState
-            icon={Building2}
-            title="Aún no hay barberías"
-            description="Crea el primer tenant para comenzar a agregar administradores y barberos."
-            action={
-              <Link
-                to="/platform/barberias/nueva"
-                className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-bold text-white"
-              >
-                <Plus className="h-4 w-4" />
-                Crear barbería
-              </Link>
-            }
-          />
+      <section className="platform-directory-section" aria-labelledby="directory-list-title">
+        <div className="platform-directory-section__heading">
+          <div>
+            <span>Inventario de plataforma</span>
+            <h2 id="directory-list-title">Directorio de tenants</h2>
+            <p>Accede a la configuración, disponibilidad y portal de cada barbería.</p>
+          </div>
+          <span className="platform-directory-count">
+            {loading ? 'Sincronizando' : `${barberias.length} ${barberias.length === 1 ? 'registro' : 'registros'}`}
+          </span>
         </div>
-      ) : (
-        <div className="pb-1 [&>div]:overflow-x-auto">
-          <Table className="min-w-[1050px]">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Barbería</TableHead>
-                <TableHead>Slug</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead className="text-center">Usuarios</TableHead>
-                <TableHead className="text-center">Barberos</TableHead>
-                <TableHead className="text-center">Servicios</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableSkeleton rows={5} cols={7} />
-              ) : (
-                barberias.map((barberia) => (
-                  <TableRow key={barberia.id}>
-                    <TableCell>
-                      <Link
-                        to={`/platform/barberias/${barberia.id}`}
-                        className="font-black text-slate-950 hover:underline"
-                      >
-                        {barberia.nombre}
-                      </Link>
-                      <p className="mt-0.5 text-xs font-medium text-slate-500">
-                        {barberia.comuna}
-                      </p>
-                    </TableCell>
-                    <TableCell>
-                      <code className="rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
-                        {barberia.slug}
-                      </code>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={barberia.activo ? 'success' : 'warning'}>
-                        {barberia.activo ? 'Activa' : 'Inactiva'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center font-mono font-black text-slate-900">
-                      <span className="inline-flex items-center gap-1.5">
-                        <Users className="h-3.5 w-3.5 text-slate-400" />
-                        {barberia.usuarios_count}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-center font-mono font-black text-slate-900">
-                      <span className="inline-flex items-center gap-1.5">
-                        <Scissors className="h-3.5 w-3.5 text-slate-400" />
-                        {barberia.barberos_count}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-center font-mono font-black text-slate-900">
-                      {barberia.servicios_count}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        <a
-                          href={buildPublicBookingUrl(barberia.slug)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-950"
-                          title="Abrir portal público"
-                          aria-label={`Abrir portal público de ${barberia.nombre}`}
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
-                        <Link
-                          to={`/platform/barberias/${barberia.id}`}
-                          className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-950"
-                          title="Ver detalle"
-                          aria-label={`Ver detalle de ${barberia.nombre}`}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Link>
-                        <Link
-                          to={`/platform/barberias/${barberia.id}/editar`}
-                          className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-950"
-                          title="Editar"
-                          aria-label={`Editar ${barberia.nombre}`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => void changeStatus(barberia)}
-                          disabled={updatingId === barberia.id}
-                          className={
-                            barberia.activo
-                              ? 'rounded-lg p-2 text-red-700 transition-colors hover:bg-red-50 disabled:opacity-40'
-                              : 'rounded-lg p-2 text-emerald-700 transition-colors hover:bg-emerald-50 disabled:opacity-40'
-                          }
-                          title={barberia.activo ? 'Desactivar' : 'Reactivar'}
-                          aria-label={`${barberia.activo ? 'Desactivar' : 'Reactivar'} ${barberia.nombre}`}
-                        >
-                          {updatingId === barberia.id ? (
-                            <RefreshCw className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Power className="h-4 w-4" />
-                          )}
-                        </button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+
+        {!loading && !error && barberias.length === 0 ? (
+          <div className="platform-directory-empty">
+            <EmptyState
+              icon={Building2}
+              title="Aún no hay barberías"
+              description="Crea el primer tenant para comenzar a agregar administradores y barberos."
+              action={
+                <Link to="/platform/barberias/nueva" className="platform-directory-empty__action">
+                  <Plus aria-hidden="true" /> Crear barbería
+                </Link>
+              }
+            />
+          </div>
+        ) : (
+          <div
+            className="platform-directory-table-region"
+            aria-busy={loading}
+            role="region"
+            aria-label="Directorio de barberías; desplázate horizontalmente para ver todas las columnas"
+            tabIndex={0}
+          >
+            <Table className="min-w-[1050px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Barbería</TableHead>
+                  <TableHead>Portal</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead className="text-center">Usuarios</TableHead>
+                  <TableHead className="text-center">Barberos</TableHead>
+                  <TableHead className="text-center">Servicios</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableSkeleton rows={5} cols={7} />
+                ) : (
+                  barberias.map((barberia) => (
+                    <PlatformBarberiaRow
+                      key={barberia.id}
+                      barberia={barberia}
+                      updating={updatingId === barberia.id}
+                      onRequestStatusChange={requestStatusChange}
+                    />
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </section>
+
+      <ConfirmDialog
+        open={pendingBarberia !== null}
+        title={`${pendingBarberia?.activo ? 'Desactivar' : 'Reactivar'} ${pendingBarberia?.nombre ?? 'barbería'}`}
+        description={
+          pendingBarberia?.activo
+            ? 'Sus usuarios no podrán iniciar sesión y su portal público quedará inactivo.'
+            : 'Se restablecerán los accesos y la disponibilidad del portal público.'
+        }
+        confirmLabel={pendingBarberia?.activo ? 'Sí, desactivar' : 'Sí, reactivar'}
+        tone={pendingBarberia?.activo ? 'danger' : 'positive'}
+        busy={pendingBarberia ? updatingId === pendingBarberia.id : false}
+        onCancel={() => setPendingBarberia(null)}
+        onConfirm={() => {
+          if (pendingBarberia) void changeStatus(pendingBarberia);
+        }}
+      />
     </div>
   );
 }

@@ -32,6 +32,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     <button
       ref={ref}
       disabled={disabled}
+      data-ui-button=""
       className={cn(
         'inline-flex items-center justify-center gap-2 rounded-lg',
         'transition-all duration-300',

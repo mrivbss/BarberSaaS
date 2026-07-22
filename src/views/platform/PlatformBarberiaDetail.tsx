@@ -1,19 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Activity,
   ArrowLeft,
   Building2,
-  Check,
-  Clipboard,
+  CalendarClock,
   ExternalLink,
+  Globe2,
   Loader2,
+  MapPin,
   Pencil,
   Plus,
   Power,
   Scissors,
-  Store,
+  Settings2,
+  ShieldCheck,
   Users,
   Wrench,
-  X,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -21,9 +23,6 @@ import {
   Button,
   Card,
   EmptyState,
-  Input,
-  PageHeader,
-  StatCard,
   Table,
   TableBody,
   TableCell,
@@ -31,7 +30,19 @@ import {
   TableHeader,
   TableRow,
 } from '../../components/ui';
-import { buildPublicBookingUrl, normalizeSlug, validateSlug } from '../../lib/slug';
+import LineSidebar, {
+  type DetailNavigationItem,
+} from '../../components/platform/detail/LineSidebar';
+import {
+  AnimatedCounter,
+  ConfirmDialog,
+  CopyButton,
+  LoadingState,
+  PlatformToast,
+  type CopyFeedback,
+} from '../../components/platform/polish';
+import { buildPublicBookingUrl } from '../../lib/slug';
+import { useMountedRef } from '../../hooks/useMountedRef';
 import {
   PlatformAdminError,
   platformAdmin,
@@ -40,44 +51,45 @@ import {
   type TenantUserRole,
 } from '../../services/platformAdmin';
 
-interface CreateUserForm {
-  nombre: string;
-  email: string;
-  rol: TenantUserRole;
-  slug: string;
-  password: string;
-  passwordConfirmation: string;
+let createUserPanelPromise: ReturnType<typeof importCreateUserPanel> | null = null;
+
+function importCreateUserPanel() {
+  return import('../../components/platform/detail/CreateTenantUserPanel');
 }
 
-interface CreateUserErrors {
-  nombre?: string;
-  email?: string;
-  slug?: string;
-  password?: string;
-  passwordConfirmation?: string;
+function loadCreateUserPanel() {
+  createUserPanelPromise ??= importCreateUserPanel();
+  return createUserPanelPromise;
 }
+
+const LazyCreateTenantUserPanel = lazy(loadCreateUserPanel);
 
 interface NavigationState {
   notice?: string;
   openCreateUser?: boolean;
 }
 
-const initialCreateUserForm: CreateUserForm = {
-  nombre: '',
-  email: '',
-  rol: 'barbero',
-  slug: '',
-  password: '',
-  passwordConfirmation: '',
-};
+type ConfirmationAction =
+  | { kind: 'user'; user: PlatformUsuario; nextStatus: boolean }
+  | { kind: 'barberia'; nextStatus: boolean };
 
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const minimumPasswordLength = 8;
+const detailSections: readonly DetailNavigationItem[] = [
+  { id: 'overview', label: 'Overview', description: 'Estado general', icon: Building2 },
+  { id: 'usuarios', label: 'Usuarios', description: 'Accesos y roles', icon: Users },
+  { id: 'servicios', label: 'Servicios', description: 'Catálogo del tenant', icon: Wrench },
+  { id: 'portal', label: 'Portal', description: 'Enlaces públicos', icon: Globe2 },
+  { id: 'configuracion', label: 'Configuración', description: 'Estado y metadata', icon: Settings2 },
+] as const;
 
 const currencyFormatter = new Intl.NumberFormat('es-CL', {
   style: 'currency',
   currency: 'CLP',
   maximumFractionDigits: 0,
+});
+
+const dateFormatter = new Intl.DateTimeFormat('es-CL', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
 });
 
 function errorMessage(error: unknown): string {
@@ -89,14 +101,89 @@ function errorMessage(error: unknown): string {
 function formatDate(value: string | null): string {
   if (!value) return 'Sin registro';
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return 'Sin registro';
-  return new Intl.DateTimeFormat('es-CL', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(parsed);
+  return Number.isNaN(parsed.getTime()) ? 'Sin registro' : dateFormatter.format(parsed);
 }
 
+interface UserRowProps {
+  user: PlatformUsuario;
+  barberiaSlug: string;
+  updating: boolean;
+  onCopyFeedback: (feedback: CopyFeedback) => void;
+  onRequestToggle: (user: PlatformUsuario) => void;
+}
+
+const PlatformUserRow = memo(function PlatformUserRow({
+  user,
+  barberiaSlug,
+  updating,
+  onCopyFeedback,
+  onRequestToggle,
+}: UserRowProps) {
+  const barberUrl =
+    user.rol === 'barbero' && user.slug
+      ? buildPublicBookingUrl(barberiaSlug, user.slug)
+      : null;
+
+  return (
+    <TableRow>
+      <TableCell>
+        <p className="font-black text-slate-950">{user.nombre}</p>
+        <p className="mt-0.5 text-xs text-slate-500">{user.email}</p>
+      </TableCell>
+      <TableCell>
+        <Badge variant="muted">
+          {user.rol === 'admin' ? 'Administrador' : 'Barbero'}
+        </Badge>
+      </TableCell>
+      <TableCell>
+        {barberUrl ? (
+          <div className="detail-table-link">
+            <code>{user.slug}</code>
+            <CopyButton value={barberUrl} subject={user.nombre} onFeedback={onCopyFeedback} />
+            <a
+              href={barberUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Abrir enlace público de ${user.nombre}`}
+              title="Abrir enlace público"
+            >
+              <ExternalLink aria-hidden="true" />
+            </a>
+          </div>
+        ) : (
+          <span className="text-xs text-slate-400">No aplica</span>
+        )}
+      </TableCell>
+      <TableCell>
+        <Badge variant={user.activo ? 'success' : 'warning'}>
+          {user.activo ? 'Activo' : 'Inactivo'}
+        </Badge>
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-xs font-medium">
+        {formatDate(user.creado_en)}
+      </TableCell>
+      <TableCell className="text-right">
+        <Button
+          type="button"
+          size="sm"
+          variant={user.activo ? 'danger' : 'secondary'}
+          disabled={updating}
+          onClick={() => onRequestToggle(user)}
+        >
+          {updating ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Power className="h-4 w-4" />
+          )}
+          {user.activo ? 'Desactivar' : 'Reactivar'}
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+});
+
 export function PlatformBarberiaDetail() {
+  const mountedRef = useMountedRef();
   const { barberiaId } = useParams<{ barberiaId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
@@ -106,18 +193,13 @@ export function PlatformBarberiaDetail() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(navigationState?.notice ?? null);
   const [showCreateUser, setShowCreateUser] = useState(navigationState?.openCreateUser === true);
-  const [createUserForm, setCreateUserForm] = useState<CreateUserForm>(() =>
-    navigationState?.openCreateUser
-      ? { ...initialCreateUserForm, rol: 'admin' }
-      : initialCreateUserForm,
+  const [createUserInitialRole, setCreateUserInitialRole] = useState<TenantUserRole>(
+    navigationState?.openCreateUser ? 'admin' : 'barbero',
   );
-  const [createUserErrors, setCreateUserErrors] = useState<CreateUserErrors>({});
-  const [slugEdited, setSlugEdited] = useState(false);
-  const [creatingUser, setCreatingUser] = useState(false);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [updatingBarberia, setUpdatingBarberia] = useState(false);
+  const [confirmation, setConfirmation] = useState<ConfirmationAction | null>(null);
   const createUserButtonRef = useRef<HTMLButtonElement>(null);
-  const createUserInFlight = useRef(false);
 
   const loadDetail = useCallback(async () => {
     if (!barberiaId) {
@@ -129,14 +211,14 @@ export function PlatformBarberiaDetail() {
     setLoading(true);
     setError(null);
     try {
-      const nextDetail = await platformAdmin.getBarberia(barberiaId);
-      setDetail(nextDetail);
+      const result = await platformAdmin.getBarberia(barberiaId);
+      if (mountedRef.current) setDetail(result);
     } catch (loadError) {
-      setError(errorMessage(loadError));
+      if (mountedRef.current) setError(errorMessage(loadError));
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  }, [barberiaId]);
+  }, [barberiaId, mountedRef]);
 
   useEffect(() => {
     void loadDetail();
@@ -151,6 +233,17 @@ export function PlatformBarberiaDetail() {
     navigate(location.pathname, { replace: true, state: null });
   }, [location.pathname, navigate, navigationState?.notice]);
 
+  useEffect(() => {
+    if (!detail || (!location.pathname.endsWith('/usuarios') && !navigationState?.openCreateUser)) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById('usuarios')?.scrollIntoView({ block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [detail, location.pathname, navigationState?.openCreateUser]);
+
   const summary = useMemo(() => {
     const usuarios = detail?.usuarios ?? [];
     return {
@@ -160,102 +253,51 @@ export function PlatformBarberiaDetail() {
     };
   }, [detail]);
 
-  const closeCreateUserForm = () => {
-    setCreateUserForm(initialCreateUserForm);
-    setCreateUserErrors({});
-    setSlugEdited(false);
-    setShowCreateUser(false);
-    window.requestAnimationFrame(() => createUserButtonRef.current?.focus());
-  };
+  const toastMessage = useMemo(
+    () =>
+      error
+        ? { id: 1, tone: 'error' as const, message: error }
+        : success
+          ? { id: 2, tone: 'success' as const, message: success }
+          : null,
+    [error, success],
+  );
 
-  const validateCreateUser = (): boolean => {
-    const nextErrors: CreateUserErrors = {};
-    if (!createUserForm.nombre.trim()) nextErrors.nombre = 'El nombre es obligatorio.';
-    if (createUserForm.nombre.trim().length > 120) {
-      nextErrors.nombre = 'Usa un máximo de 120 caracteres.';
-    }
-    if (!emailPattern.test(createUserForm.email.trim())) {
-      nextErrors.email = 'Ingresa un correo electrónico válido.';
-    }
-    if (createUserForm.rol === 'barbero') {
-      const slugError = validateSlug(createUserForm.slug);
-      if (slugError) nextErrors.slug = slugError;
-    }
-    if (createUserForm.password.length < minimumPasswordLength) {
-      nextErrors.password = `La contraseña debe tener al menos ${minimumPasswordLength} caracteres.`;
-    }
-    if (!createUserForm.passwordConfirmation) {
-      nextErrors.passwordConfirmation = 'Confirma la contraseña.';
-    } else if (createUserForm.password !== createUserForm.passwordConfirmation) {
-      nextErrors.passwordConfirmation = 'Las contraseñas no coinciden.';
-    }
-    setCreateUserErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  };
-
-  const createUser = async () => {
-    if (createUserInFlight.current || !barberiaId || !validateCreateUser()) return;
-
-    createUserInFlight.current = true;
-    setCreatingUser(true);
+  const dismissToast = useCallback(() => {
     setError(null);
     setSuccess(null);
-    try {
-      const result = await platformAdmin.createTenantUser({
-        barberia_id: barberiaId,
-        nombre: createUserForm.nombre.trim(),
-        email: createUserForm.email.trim().toLowerCase(),
-        rol: createUserForm.rol,
-        password: createUserForm.password,
-        ...(createUserForm.rol === 'barbero' && slugEdited
-          ? { slug: createUserForm.slug }
-          : {}),
-      });
-      const created = result.usuario;
-      setDetail((current) =>
-        current ? { ...current, usuarios: [...current.usuarios, created] } : current,
-      );
-      setSuccess('Usuario creado correctamente.');
-      closeCreateUserForm();
-    } catch (createError) {
-      if (createError instanceof PlatformAdminError) {
-        if (createError.code === 'duplicate_barber_slug') {
-          setCreateUserErrors((current) => ({ ...current, slug: createError.message }));
-        }
-        if (createError.code === 'duplicate_email') {
-          setCreateUserErrors((current) => ({ ...current, email: createError.message }));
-        }
-        if (createError.code === 'password_too_short' || createError.code === 'password_policy') {
-          setCreateUserErrors((current) => ({ ...current, password: createError.message }));
-        }
-      }
-      setError(errorMessage(createError));
-    } finally {
-      createUserInFlight.current = false;
-      setCreatingUser(false);
-    }
-  };
+  }, []);
 
-  const submitCreateUser = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    void createUser();
-  };
+  const closeCreateUserForm = useCallback(() => {
+    setCreateUserInitialRole('barbero');
+    setShowCreateUser(false);
+    window.requestAnimationFrame(() => createUserButtonRef.current?.focus());
+  }, []);
+
+  const handleUserCreated = useCallback((user: PlatformUsuario) => {
+    setError(null);
+    setDetail((current) =>
+      current ? { ...current, usuarios: [...current.usuarios, user] } : current,
+    );
+    setSuccess('Usuario creado correctamente.');
+    closeCreateUserForm();
+  }, [closeCreateUserForm]);
+
+  const handleCreateUserError = useCallback((message: string) => {
+    setSuccess(null);
+    setError(message);
+  }, []);
 
   const changeUserStatus = async (user: PlatformUsuario) => {
     if (!barberiaId) return;
     const nextStatus = !user.activo;
-    const confirmed = window.confirm(
-      `¿Confirmas que deseas ${nextStatus ? 'reactivar' : 'desactivar'} a ${user.nombre}?${
-        nextStatus ? '' : ' Ya no podrá iniciar sesión, pero su historial se conservará.'
-      }`,
-    );
-    if (!confirmed) return;
 
     setUpdatingUserId(user.id);
     setError(null);
     setSuccess(null);
     try {
       const updated = await platformAdmin.setUserActive(barberiaId, user.id, nextStatus);
+      if (!mountedRef.current) return;
       setDetail((current) =>
         current
           ? {
@@ -270,31 +312,25 @@ export function PlatformBarberiaDetail() {
         `${user.nombre} fue ${nextStatus ? 'reactivado' : 'desactivado'} correctamente.`,
       );
     } catch (statusError) {
-      setError(errorMessage(statusError));
+      if (mountedRef.current) setError(errorMessage(statusError));
     } finally {
-      setUpdatingUserId(null);
+      if (mountedRef.current) {
+        setUpdatingUserId(null);
+        setConfirmation(null);
+      }
     }
   };
 
   const changeBarberiaStatus = async () => {
     if (!detail || !barberiaId) return;
     const nextStatus = !detail.barberia.activo;
-    const confirmed = window.confirm(
-      `¿Confirmas que deseas ${nextStatus ? 'reactivar' : 'desactivar'} “${
-        detail.barberia.nombre
-      }”?${
-        nextStatus
-          ? ''
-          : ' Sus usuarios no podrán iniciar sesión y no se aceptarán nuevas reservas públicas.'
-      }`,
-    );
-    if (!confirmed) return;
 
     setUpdatingBarberia(true);
     setError(null);
     setSuccess(null);
     try {
       const updated = await platformAdmin.setBarberiaActive(barberiaId, nextStatus);
+      if (!mountedRef.current) return;
       setDetail((current) =>
         current ? { ...current, barberia: updated } : current,
       );
@@ -302,46 +338,46 @@ export function PlatformBarberiaDetail() {
         `${updated.nombre} fue ${nextStatus ? 'reactivada' : 'desactivada'} correctamente.`,
       );
     } catch (statusError) {
-      setError(errorMessage(statusError));
+      if (mountedRef.current) setError(errorMessage(statusError));
     } finally {
-      setUpdatingBarberia(false);
+      if (mountedRef.current) {
+        setUpdatingBarberia(false);
+        setConfirmation(null);
+      }
     }
   };
 
-  const copyUrl = async (url: string, label: string) => {
-    setError(null);
-    setSuccess(null);
-    try {
-      await navigator.clipboard.writeText(url);
-      setSuccess(`Enlace público de ${label} copiado al portapapeles.`);
-    } catch {
-      setError(`No se pudo copiar automáticamente. Copia este enlace: ${url}`);
+  const handleCopyFeedback = useCallback((feedback: CopyFeedback) => {
+    if (feedback.tone === 'success') {
+      setError(null);
+      setSuccess(feedback.message);
+    } else {
+      setSuccess(null);
+      setError(feedback.message);
     }
-  };
+  }, []);
+
+  const requestUserStatusChange = useCallback((user: PlatformUsuario) => {
+    setConfirmation({ kind: 'user', user, nextStatus: !user.activo });
+  }, []);
 
   if (loading) {
     return (
-      <div className="flex min-h-[70vh] items-center justify-center p-8" role="status">
-        <div className="flex items-center gap-3 text-sm font-bold text-slate-600">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          Cargando detalle de la barbería...
-        </div>
+      <div className="platform-page-loading">
+        <LoadingState label="Cargando detalle de la barbería" />
       </div>
     );
   }
 
   if (!detail) {
     return (
-      <div className="mx-auto max-w-3xl p-5 sm:p-8 lg:p-10">
+      <div className="detail-load-error">
         <Card className="border-2 border-red-900 bg-red-50 text-center">
-          <Building2 className="mx-auto h-8 w-8 text-red-800" />
+          <Building2 className="mx-auto h-8 w-8 text-red-800" aria-hidden="true" />
           <h1 className="mt-4 text-xl font-black text-red-950">No se pudo cargar la barbería</h1>
           <p className="mt-2 text-sm font-medium text-red-900">{error}</p>
           <div className="mt-6 flex justify-center gap-3">
-            <Link
-              to="/platform/barberias"
-              className="rounded-lg px-4 py-2 text-sm font-bold text-red-900 hover:bg-red-100"
-            >
+            <Link to="/platform/barberias" className="rounded-lg px-4 py-2 text-sm font-bold text-red-900 hover:bg-red-100">
               Volver al listado
             </Link>
             <Button type="button" size="sm" onClick={() => void loadDetail()}>
@@ -355,518 +391,431 @@ export function PlatformBarberiaDetail() {
 
   const { barberia, usuarios, servicios } = detail;
   const generalPublicUrl = buildPublicBookingUrl(barberia.slug);
+  const barberPortals = usuarios.filter(
+    (user) => user.rol === 'barbero' && Boolean(user.slug),
+  );
 
   return (
-    <div className="mx-auto max-w-7xl space-y-7 p-5 sm:p-8 lg:p-10">
-      <Link
-        to="/platform/barberias"
-        className="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Todas las barberías
+    <div className="platform-detail-page">
+      <Link to="/platform/barberias" className="detail-back-link">
+        <ArrowLeft aria-hidden="true" />
+        Directorio de barberías
       </Link>
 
-      <PageHeader
-        title={barberia.nombre}
-        subtitle={`${barberia.comuna} · /b/${barberia.slug}`}
-        badge={
-          <Badge variant={barberia.activo ? 'success' : 'warning'}>
-            {barberia.activo ? 'Activa' : 'Inactiva'}
-          </Badge>
-        }
-        action={
-          <Link
-            to={`/platform/barberias/${barberia.id}/editar`}
-            className="inline-flex items-center gap-2 rounded-lg border-2 border-slate-900 bg-white px-4 py-2 text-sm font-black text-slate-950 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] hover:bg-slate-50"
-          >
-            <Pencil className="h-4 w-4" />
-            Editar
+      <header className="detail-identity">
+        <div className="detail-identity__ambient" aria-hidden="true" />
+        <div className="detail-identity__copy">
+          <span className="detail-identity__eyebrow">
+            <Scissors aria-hidden="true" /> Tenant workspace
+          </span>
+          <h1>{barberia.nombre}</h1>
+          <div className="detail-identity__location">
+            <span><MapPin aria-hidden="true" /> {barberia.comuna}</span>
+            <code>/b/{barberia.slug}</code>
+          </div>
+          <div className="detail-identity__metadata">
+            <span className={`detail-status-pill${barberia.activo ? ' is-active' : ''}`}>
+              <span aria-hidden="true" /> {barberia.activo ? 'Operativa' : 'Inactiva'}
+            </span>
+            <span>ID {barberia.id.slice(0, 8)}</span>
+          </div>
+        </div>
+
+        <div className="detail-identity__actions">
+          <a href={generalPublicUrl} target="_blank" rel="noreferrer" className="detail-glass-button">
+            <ExternalLink aria-hidden="true" /> Abrir portal
+          </a>
+          <Link to={`/platform/barberias/${barberia.id}/editar`} className="detail-gold-button">
+            <Pencil aria-hidden="true" /> Editar tenant
           </Link>
-        }
-        className="mb-0"
+        </div>
+      </header>
+
+      <PlatformToast
+        toast={toastMessage}
+        onDismiss={dismissToast}
       />
 
-      {error && (
-        <div role="alert" className="flex items-start justify-between gap-4 rounded-xl border-2 border-red-900 bg-red-50 p-4 text-sm font-semibold text-red-900">
-          <span>{error}</span>
-          <button type="button" onClick={() => setError(null)} aria-label="Cerrar error">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-      {success && (
-        <div role="status" className="flex items-start justify-between gap-4 rounded-xl border-2 border-emerald-800 bg-emerald-50 p-4 text-sm font-semibold text-emerald-900">
-          <span className="flex items-start gap-2">
-            <Check className="mt-0.5 h-4 w-4 shrink-0" />
-            {success}
-          </span>
-          <button type="button" onClick={() => setSuccess(null)} aria-label="Cerrar mensaje">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <StatCard icon={Users} value={summary.users} label="Usuarios" subtext="Perfiles del tenant" />
-        <StatCard icon={Scissors} value={summary.barbers} label="Barberos" subtext="Enlaces individuales" />
-        <StatCard icon={Wrench} value={summary.services} label="Servicios" subtext="Catálogo disponible" />
-      </div>
+      <div className="detail-workbench">
+        <aside className="detail-navigation-shell">
+          <div className="detail-navigation-shell__heading">
+            <span>Secciones</span>
+            <small>Explora el tenant</small>
+          </div>
+          <LineSidebar
+            items={detailSections}
+            initialActiveId={location.pathname.endsWith('/usuarios') ? 'usuarios' : 'overview'}
+          />
+        </aside>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <Card padding="lg" className="border-2 border-slate-900 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100">
-                <Store className="h-5 w-5" />
-              </div>
+        <div className="detail-sections">
+          <section id="overview" className="detail-section" aria-labelledby="overview-title">
+            <div className="detail-section__heading">
               <div>
-                <h2 className="font-black text-slate-950">Información general</h2>
-                <p className="text-xs text-slate-500">Datos y estado del tenant</p>
+                <span className="detail-section__eyebrow">01 / Estado general</span>
+                <h2 id="overview-title">Overview</h2>
+                <p>Lectura rápida de la estructura y operación actual del tenant.</p>
               </div>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant={barberia.activo ? 'danger' : 'secondary'}
-              disabled={updatingBarberia}
-              onClick={() => void changeBarberiaStatus()}
-            >
-              {updatingBarberia ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Power className="h-4 w-4" />
-              )}
-              {barberia.activo ? 'Desactivar' : 'Reactivar'}
-            </Button>
-          </div>
-
-          <dl className="mt-6 grid grid-cols-1 gap-5 border-t border-slate-200 pt-5 sm:grid-cols-2">
-            <div>
-              <dt className="text-[11px] font-black uppercase tracking-wider text-slate-500">Nombre</dt>
-              <dd className="mt-1 text-sm font-bold text-slate-950">{barberia.nombre}</dd>
-            </div>
-            <div>
-              <dt className="text-[11px] font-black uppercase tracking-wider text-slate-500">Comuna</dt>
-              <dd className="mt-1 text-sm font-bold text-slate-950">{barberia.comuna}</dd>
-            </div>
-            <div>
-              <dt className="text-[11px] font-black uppercase tracking-wider text-slate-500">Slug</dt>
-              <dd className="mt-1 font-mono text-sm font-bold text-slate-950">{barberia.slug}</dd>
-            </div>
-            <div>
-              <dt className="text-[11px] font-black uppercase tracking-wider text-slate-500">Identificador</dt>
-              <dd className="mt-1 break-all font-mono text-xs font-bold text-slate-700">{barberia.id}</dd>
-            </div>
-            <div>
-              <dt className="text-[11px] font-black uppercase tracking-wider text-slate-500">Creada</dt>
-              <dd className="mt-1 text-sm font-semibold text-slate-700">{formatDate(barberia.creado_en)}</dd>
-            </div>
-            <div>
-              <dt className="text-[11px] font-black uppercase tracking-wider text-slate-500">Última actualización</dt>
-              <dd className="mt-1 text-sm font-semibold text-slate-700">{formatDate(barberia.actualizado_en)}</dd>
-            </div>
-          </dl>
-        </Card>
-
-        <Card padding="lg" className="border-2 border-slate-900 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-100">
-              <ExternalLink className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="font-black text-slate-950">Portal público</h2>
-              <p className="text-xs text-slate-500">Reserva general de la barbería</p>
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <p className="break-all font-mono text-xs font-bold text-slate-800">{generalPublicUrl}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => void copyUrl(generalPublicUrl, barberia.nombre)}
-              >
-                <Clipboard className="h-4 w-4" />
-                Copiar enlace
-              </Button>
-              <a
-                href={generalPublicUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 hover:text-slate-950"
-              >
-                <ExternalLink className="h-4 w-4" />
-                Abrir portal
-              </a>
-            </div>
-          </div>
-
-          {!barberia.activo && (
-            <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs font-semibold text-amber-900">
-              El portal no acepta reservas mientras la barbería está inactiva.
-            </p>
-          )}
-        </Card>
-      </div>
-
-      <section className="space-y-4" id="usuarios">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-xl font-black text-slate-950">Usuarios</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Administradores y barberos asignados exclusivamente a este tenant.
-            </p>
-          </div>
-          <Button
-            ref={createUserButtonRef}
-            type="button"
-            disabled={!barberia.activo}
-            onClick={() => {
-              setShowCreateUser(true);
-              setError(null);
-            }}
-            className="bg-slate-950 text-white"
-          >
-            <Plus className="h-4 w-4" />
-            Crear usuario
-          </Button>
-        </div>
-
-        {!barberia.activo && (
-          <p className="text-xs font-semibold text-amber-800">
-            Reactiva la barbería para poder crear nuevos usuarios.
-          </p>
-        )}
-
-        {showCreateUser && (
-          <Card padding="lg" className="border-2 border-slate-900 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
-            <div className="mb-6 flex items-start justify-between gap-4">
-              <div>
-                <h3 className="font-black text-slate-950">Crear usuario</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Crea las credenciales de acceso para este usuario en {barberia.nombre}.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeCreateUserForm}
-                aria-label="Cerrar formulario"
-                disabled={creatingUser}
-                className="disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <X className="h-5 w-5 text-slate-500" />
-              </button>
+              <Activity aria-hidden="true" />
             </div>
 
-            <form onSubmit={submitCreateUser} noValidate className="space-y-5">
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                <Input
-                  label="Nombre"
-                  value={createUserForm.nombre}
-                  maxLength={120}
-                  autoComplete="name"
-                  placeholder="Nombre completo"
-                  error={createUserErrors.nombre}
-                  autoFocus
-                  disabled={creatingUser}
-                  onChange={(event) => {
-                    const nextName = event.target.value;
-                    setCreateUserForm((current) => ({
-                      ...current,
-                      nombre: nextName,
-                      slug:
-                        current.rol === 'barbero' && !slugEdited
-                          ? normalizeSlug(nextName)
-                          : current.slug,
-                    }));
-                    if (createUserErrors.nombre) {
-                      setCreateUserErrors((current) => ({ ...current, nombre: undefined }));
-                    }
-                  }}
-                />
-                <Input
-                  label="Correo electrónico"
-                  type="email"
-                  value={createUserForm.email}
-                  maxLength={254}
-                  autoComplete="email"
-                  placeholder="persona@ejemplo.cl"
-                  error={createUserErrors.email}
-                  disabled={creatingUser}
-                  onChange={(event) => {
-                    setCreateUserForm((current) => ({ ...current, email: event.target.value }));
-                    if (createUserErrors.email) {
-                      setCreateUserErrors((current) => ({ ...current, email: undefined }));
-                    }
-                  }}
-                />
-              </div>
+            <div className="detail-stat-grid">
+              <article className="detail-stat detail-stat--cyan">
+                <span><Users aria-hidden="true" /></span>
+                <strong><AnimatedCounter value={summary.users} /></strong>
+                <p>Usuarios</p>
+                <small>Perfiles asignados</small>
+              </article>
+              <article className="detail-stat detail-stat--purple">
+                <span><Scissors aria-hidden="true" /></span>
+                <strong><AnimatedCounter value={summary.barbers} /></strong>
+                <p>Barberos</p>
+                <small>Perfiles con portal</small>
+              </article>
+              <article className="detail-stat detail-stat--gold">
+                <span><Wrench aria-hidden="true" /></span>
+                <strong><AnimatedCounter value={summary.services} /></strong>
+                <p>Servicios</p>
+                <small>Catálogo configurado</small>
+              </article>
+            </div>
 
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="tenant-role" className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    Rol
-                  </label>
-                  <select
-                    id="tenant-role"
-                    value={createUserForm.rol}
-                    disabled={creatingUser}
-                    onChange={(event) => {
-                      const rol = event.target.value as TenantUserRole;
-                      setCreateUserForm((current) => ({
-                        ...current,
-                        rol,
-                        slug: rol === 'barbero' ? normalizeSlug(current.nombre) : '',
-                      }));
-                      setSlugEdited(false);
-                      setCreateUserErrors((current) => ({ ...current, slug: undefined }));
-                    }}
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 shadow-input outline-none focus:border-slate-950 focus:shadow-input-focus disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <option value="barbero">Barbero</option>
-                    <option value="admin">Administrador</option>
-                  </select>
-                  <p className="text-[11px] text-slate-500">
-                    No es posible crear superadministradores desde esta interfaz.
-                  </p>
+            <div className="detail-overview-grid">
+              <article className="detail-glass-panel">
+                <div className="detail-panel-title">
+                  <span><Building2 aria-hidden="true" /></span>
+                  <div><h3>Identidad del tenant</h3><p>Datos públicos de la barbería</p></div>
                 </div>
+                <dl className="detail-data-list">
+                  <div><dt>Nombre</dt><dd>{barberia.nombre}</dd></div>
+                  <div><dt>Comuna</dt><dd>{barberia.comuna}</dd></div>
+                  <div><dt>Slug público</dt><dd><code>{barberia.slug}</code></dd></div>
+                </dl>
+              </article>
 
-                {createUserForm.rol === 'barbero' && (
-                  <Input
-                    label="Slug del barbero"
-                    value={createUserForm.slug}
-                    maxLength={120}
-                    spellCheck={false}
-                    autoCapitalize="none"
-                    placeholder="nombre-barbero"
-                    error={createUserErrors.slug}
-                    disabled={creatingUser}
-                    onChange={(event) => {
-                      setCreateUserForm((current) => ({
-                        ...current,
-                        slug: normalizeSlug(event.target.value),
-                      }));
-                      setSlugEdited(true);
-                      if (createUserErrors.slug) {
-                        setCreateUserErrors((current) => ({ ...current, slug: undefined }));
-                      }
-                    }}
-                  />
-                )}
-              </div>
-
-              {createUserForm.rol === 'barbero' && createUserForm.slug && (
-                <p className="rounded-lg bg-slate-50 p-3 text-xs font-medium text-slate-600">
-                  Enlace individual:{' '}
-                  <span className="break-all font-mono font-bold text-slate-900">
-                    {buildPublicBookingUrl(barberia.slug, createUserForm.slug)}
-                  </span>
-                </p>
-              )}
-
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                <div>
-                  <Input
-                    id="initial-password"
-                    label="Contraseña inicial"
-                    type="password"
-                    value={createUserForm.password}
-                    minLength={minimumPasswordLength}
-                    autoComplete="new-password"
-                    required
-                    aria-describedby="initial-password-requirements"
-                    error={createUserErrors.password}
-                    disabled={creatingUser}
-                    onChange={(event) => {
-                      setCreateUserForm((current) => ({ ...current, password: event.target.value }));
-                      if (createUserErrors.password) {
-                        setCreateUserErrors((current) => ({ ...current, password: undefined }));
-                      }
-                    }}
-                  />
-                  <p id="initial-password-requirements" className="mt-1 text-[11px] text-slate-500">
-                    Usa al menos {minimumPasswordLength} caracteres y entrégala al usuario por un canal seguro.
-                  </p>
+              <article className="detail-glass-panel detail-glass-panel--dark">
+                <div className="detail-panel-title">
+                  <span><ShieldCheck aria-hidden="true" /></span>
+                  <div><h3>Señal operativa</h3><p>Disponibilidad registrada</p></div>
                 </div>
-                <Input
-                  id="initial-password-confirmation"
-                  label="Confirmar contraseña"
-                  type="password"
-                  value={createUserForm.passwordConfirmation}
-                  minLength={minimumPasswordLength}
-                  autoComplete="new-password"
-                  required
-                  error={createUserErrors.passwordConfirmation}
-                  disabled={creatingUser}
-                  onChange={(event) => {
-                    setCreateUserForm((current) => ({
-                      ...current,
-                      passwordConfirmation: event.target.value,
-                    }));
-                    if (createUserErrors.passwordConfirmation) {
-                      setCreateUserErrors((current) => ({
-                        ...current,
-                        passwordConfirmation: undefined,
-                      }));
-                    }
-                  }}
-                />
-              </div>
-
-              <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={closeCreateUserForm}
-                  disabled={creatingUser}
-                >
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={creatingUser} className="bg-slate-950 text-white">
-                  {creatingUser ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  {creatingUser ? 'Creando usuario...' : 'Crear usuario'}
-                </Button>
-              </div>
-            </form>
-          </Card>
-        )}
-
-        {usuarios.length === 0 ? (
-          <div className="rounded-xl border-2 border-slate-900 bg-white shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
-            <EmptyState
-              icon={Users}
-              title="Esta barbería aún no tiene usuarios"
-              description="Crea primero al administrador o agrega un barbero."
-            />
-          </div>
-        ) : (
-          <div className="[&>div]:overflow-x-auto">
-            <Table className="min-w-[900px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Usuario</TableHead>
-                  <TableHead>Rol</TableHead>
-                  <TableHead>Slug / enlace público</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead>Creado</TableHead>
-                  <TableHead className="text-right">Acción</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {usuarios.map((user) => {
-                  const barberUrl =
-                    user.rol === 'barbero' && user.slug
-                      ? buildPublicBookingUrl(barberia.slug, user.slug)
-                      : null;
-                  return (
-                    <TableRow key={user.id}>
-                      <TableCell>
-                        <p className="font-black text-slate-950">{user.nombre}</p>
-                        <p className="mt-0.5 text-xs text-slate-500">{user.email}</p>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="muted">
-                          {user.rol === 'admin' ? 'Administrador' : 'Barbero'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {barberUrl ? (
-                          <div className="flex items-center gap-2">
-                            <code className="max-w-[220px] truncate rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
-                              {user.slug}
-                            </code>
-                            <button
-                              type="button"
-                              onClick={() => void copyUrl(barberUrl, user.nombre)}
-                              className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
-                              aria-label={`Copiar enlace público de ${user.nombre}`}
-                              title="Copiar enlace público"
-                            >
-                              <Clipboard className="h-4 w-4" />
-                            </button>
-                            <a
-                              href={barberUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
-                              aria-label={`Abrir enlace público de ${user.nombre}`}
-                              title="Abrir enlace público"
-                            >
-                              <ExternalLink className="h-4 w-4" />
-                            </a>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-slate-400">No aplica</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={user.activo ? 'success' : 'warning'}>
-                          {user.activo ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-xs font-medium">
-                        {formatDate(user.creado_en)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={user.activo ? 'danger' : 'secondary'}
-                          disabled={updatingUserId === user.id}
-                          onClick={() => void changeUserStatus(user)}
-                        >
-                          {updatingUserId === user.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Power className="h-4 w-4" />
-                          )}
-                          {user.activo ? 'Desactivar' : 'Reactivar'}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-xl font-black text-slate-950">Servicios</h2>
-          <p className="mt-1 text-sm text-slate-500">Resumen del catálogo configurado por el tenant.</p>
-        </div>
-
-        {servicios.length === 0 ? (
-          <Card className="border-2 border-slate-900">
-            <EmptyState
-              icon={Wrench}
-              title="Sin servicios configurados"
-              description="El administrador de la barbería podrá crear su catálogo desde el dashboard."
-            />
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {servicios.map((servicio) => (
-              <Card key={servicio.id} padding="sm" className="border-2 border-slate-900">
-                <div className="flex items-start justify-between gap-3">
+                <div className="detail-operation-state">
+                  <span className={barberia.activo ? 'is-active' : ''} aria-hidden="true" />
                   <div>
-                    <p className="font-black text-slate-950">{servicio.nombre}</p>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">
-                      {servicio.duracion} minutos
+                    <strong>{barberia.activo ? 'Tenant activo' : 'Tenant inactivo'}</strong>
+                    <p>
+                      {barberia.activo
+                        ? 'Usuarios y reservas públicas habilitados.'
+                        : 'Acceso y nuevas reservas públicas deshabilitados.'}
                     </p>
                   </div>
-                  <span className="whitespace-nowrap font-mono text-sm font-black text-slate-950">
-                    {currencyFormatter.format(servicio.precio)}
-                  </span>
                 </div>
-              </Card>
-            ))}
-          </div>
-        )}
-      </section>
+                <time dateTime={barberia.actualizado_en ?? undefined}>
+                  Última actualización · {formatDate(barberia.actualizado_en)}
+                </time>
+              </article>
+            </div>
+          </section>
+
+          <section id="usuarios" className="detail-section" aria-labelledby="users-title">
+            <div className="detail-section__heading detail-section__heading--action">
+              <div>
+                <span className="detail-section__eyebrow">02 / Acceso</span>
+                <h2 id="users-title">Usuarios</h2>
+                <p>Administradores y barberos asignados exclusivamente a este tenant.</p>
+              </div>
+              <Button
+                ref={createUserButtonRef}
+                type="button"
+                disabled={!barberia.activo}
+                aria-expanded={showCreateUser}
+                aria-controls="create-tenant-user"
+                onPointerEnter={() => void loadCreateUserPanel()}
+                onFocus={() => void loadCreateUserPanel()}
+                onClick={() => {
+                  setShowCreateUser(true);
+                  setError(null);
+                }}
+                className="detail-create-user-button"
+              >
+                <Plus aria-hidden="true" /> Crear usuario
+              </Button>
+            </div>
+
+            {!barberia.activo && (
+              <p className="detail-inline-warning">
+                Reactiva la barbería desde Configuración para poder crear nuevos usuarios.
+              </p>
+            )}
+
+            {showCreateUser && (
+              <Suspense
+                fallback={(
+                  <Card id="create-tenant-user" padding="lg" className="detail-create-user-panel">
+                    <LoadingState label="Preparando formulario seguro" compact />
+                  </Card>
+                )}
+              >
+                <LazyCreateTenantUserPanel
+                  barberiaId={barberia.id}
+                  barberiaName={barberia.nombre}
+                  barberiaSlug={barberia.slug}
+                  initialRole={createUserInitialRole}
+                  onCreated={handleUserCreated}
+                  onClose={closeCreateUserForm}
+                  onError={handleCreateUserError}
+                />
+              </Suspense>
+            )}
+
+            {usuarios.length === 0 ? (
+              <div className="detail-empty-panel">
+                <EmptyState
+                  icon={Users}
+                  title="Esta barbería aún no tiene usuarios"
+                  description="Crea primero al administrador o agrega un barbero."
+                />
+              </div>
+            ) : (
+              <div
+                className="detail-table-region"
+                role="region"
+                aria-label="Usuarios de la barbería; desplázate horizontalmente para ver todas las columnas"
+                tabIndex={0}
+              >
+                <Table className="min-w-[920px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Usuario</TableHead>
+                      <TableHead>Rol</TableHead>
+                      <TableHead>Slug / enlace público</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Creado</TableHead>
+                      <TableHead className="text-right">Acción</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {usuarios.map((user) => (
+                      <PlatformUserRow
+                        key={user.id}
+                        user={user}
+                        barberiaSlug={barberia.slug}
+                        updating={updatingUserId === user.id}
+                        onCopyFeedback={handleCopyFeedback}
+                        onRequestToggle={requestUserStatusChange}
+                      />
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </section>
+
+          <section id="servicios" className="detail-section" aria-labelledby="services-title">
+            <div className="detail-section__heading">
+              <div>
+                <span className="detail-section__eyebrow">03 / Catálogo</span>
+                <h2 id="services-title">Servicios</h2>
+                <p>Resumen del catálogo configurado desde el dashboard del tenant.</p>
+              </div>
+              <Wrench aria-hidden="true" />
+            </div>
+
+            {servicios.length === 0 ? (
+              <div className="detail-empty-panel">
+                <EmptyState
+                  icon={Wrench}
+                  title="Sin servicios configurados"
+                  description="El administrador de la barbería podrá crear su catálogo desde el dashboard."
+                />
+              </div>
+            ) : (
+              <div className="detail-services-grid">
+                {servicios.map((servicio, index) => (
+                  <article key={servicio.id} className="detail-service-card">
+                    <div className="detail-service-card__index">
+                      <span>{String(index + 1).padStart(2, '0')}</span>
+                      <Scissors aria-hidden="true" />
+                    </div>
+                    <h3>{servicio.nombre}</h3>
+                    <div className="detail-service-card__footer">
+                      <span>{servicio.duracion} minutos</span>
+                      <strong>{currencyFormatter.format(servicio.precio)}</strong>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section id="portal" className="detail-section" aria-labelledby="portal-title">
+            <div className="detail-section__heading">
+              <div>
+                <span className="detail-section__eyebrow">04 / Experiencia pública</span>
+                <h2 id="portal-title">Portal</h2>
+                <p>Accesos públicos generales e individuales disponibles para reservas.</p>
+              </div>
+              <Globe2 aria-hidden="true" />
+            </div>
+
+            <article className="detail-portal-card">
+              <div className="detail-portal-card__halo" aria-hidden="true" />
+              <div className="detail-portal-card__heading">
+                <span><Globe2 aria-hidden="true" /></span>
+                <div><small>Portal general</small><h3>{barberia.nombre}</h3></div>
+                <span className={`detail-status-pill${barberia.activo ? ' is-active' : ''}`}>
+                  {barberia.activo ? 'Disponible' : 'Pausado'}
+                </span>
+              </div>
+              <div className="detail-url-field">
+                <code>{generalPublicUrl}</code>
+                <div>
+                  <CopyButton
+                    value={generalPublicUrl}
+                    subject={barberia.nombre}
+                    showLabel
+                    onFeedback={handleCopyFeedback}
+                  />
+                  <a href={generalPublicUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink aria-hidden="true" /> Abrir
+                  </a>
+                </div>
+              </div>
+              {!barberia.activo && (
+                <p className="detail-portal-card__warning">
+                  El portal no acepta reservas mientras la barbería está inactiva.
+                </p>
+              )}
+            </article>
+
+            <div className="detail-portal-directory">
+              <div className="detail-portal-directory__heading">
+                <div>
+                  <h3>Portales de barberos</h3>
+                  <p>{barberPortals.length} enlaces individuales configurados.</p>
+                </div>
+                <Scissors aria-hidden="true" />
+              </div>
+              {barberPortals.length === 0 ? (
+                <p className="detail-portal-directory__empty">No hay enlaces individuales disponibles.</p>
+              ) : (
+                <ul>
+                  {barberPortals.map((user) => {
+                    const url = buildPublicBookingUrl(barberia.slug, user.slug ?? undefined);
+                    return (
+                      <li key={user.id}>
+                        <span><strong>{user.nombre}</strong><code>/{user.slug}</code></span>
+                        <span>
+                          <CopyButton
+                            value={url}
+                            subject={user.nombre}
+                            onFeedback={handleCopyFeedback}
+                          />
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`Abrir enlace público de ${user.nombre}`}
+                          >
+                            <ExternalLink aria-hidden="true" />
+                          </a>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </section>
+
+          <section id="configuracion" className="detail-section" aria-labelledby="configuration-title">
+            <div className="detail-section__heading">
+              <div>
+                <span className="detail-section__eyebrow">05 / Administración</span>
+                <h2 id="configuration-title">Configuración</h2>
+                <p>Identidad técnica, fechas de registro y control de disponibilidad.</p>
+              </div>
+              <Settings2 aria-hidden="true" />
+            </div>
+
+            <div className="detail-configuration-grid">
+              <article className="detail-glass-panel">
+                <div className="detail-panel-title">
+                  <span><CalendarClock aria-hidden="true" /></span>
+                  <div><h3>Metadata del registro</h3><p>Información persistida en plataforma</p></div>
+                </div>
+                <dl className="detail-config-data">
+                  <div><dt>Identificador</dt><dd><code>{barberia.id}</code></dd></div>
+                  <div><dt>Creada</dt><dd>{formatDate(barberia.creado_en)}</dd></div>
+                  <div><dt>Última actualización</dt><dd>{formatDate(barberia.actualizado_en)}</dd></div>
+                </dl>
+                <Link to={`/platform/barberias/${barberia.id}/editar`} className="detail-config-edit">
+                  <Pencil aria-hidden="true" /> Editar nombre, comuna y slug
+                  <ArrowLeft aria-hidden="true" />
+                </Link>
+              </article>
+
+              <article className={`detail-danger-panel${barberia.activo ? '' : ' is-inactive'}`}>
+                <div className="detail-danger-panel__heading">
+                  <span><Power aria-hidden="true" /></span>
+                  <div>
+                    <h3>{barberia.activo ? 'Desactivar tenant' : 'Reactivar tenant'}</h3>
+                    <p>
+                      {barberia.activo
+                        ? 'Bloquea el inicio de sesión y detiene nuevas reservas públicas.'
+                        : 'Restablece los accesos y la disponibilidad del portal público.'}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant={barberia.activo ? 'danger' : 'secondary'}
+                  disabled={updatingBarberia}
+                  onClick={() =>
+                    setConfirmation({ kind: 'barberia', nextStatus: !barberia.activo })
+                  }
+                >
+                  {updatingBarberia ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Power className="h-4 w-4" />
+                  )}
+                  {barberia.activo ? 'Desactivar barbería' : 'Reactivar barbería'}
+                </Button>
+              </article>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={confirmation !== null}
+        title={
+          confirmation?.kind === 'user'
+            ? `${confirmation.nextStatus ? 'Reactivar' : 'Desactivar'} a ${confirmation.user.nombre}`
+            : `${confirmation?.nextStatus ? 'Reactivar' : 'Desactivar'} ${barberia.nombre}`
+        }
+        description={
+          confirmation?.kind === 'user'
+            ? confirmation.nextStatus
+              ? 'El usuario recuperará el acceso al tenant con sus credenciales actuales.'
+              : 'Ya no podrá iniciar sesión, pero su perfil y su historial se conservarán.'
+            : confirmation?.nextStatus
+              ? 'Se restablecerán los accesos y la disponibilidad del portal público.'
+              : 'Los usuarios no podrán iniciar sesión y no se aceptarán nuevas reservas públicas.'
+        }
+        confirmLabel={confirmation?.nextStatus ? 'Sí, reactivar' : 'Sí, desactivar'}
+        tone={confirmation?.nextStatus ? 'positive' : 'danger'}
+        busy={
+          confirmation?.kind === 'user'
+            ? updatingUserId === confirmation.user.id
+            : updatingBarberia
+        }
+        onCancel={() => setConfirmation(null)}
+        onConfirm={() => {
+          if (confirmation?.kind === 'user') void changeUserStatus(confirmation.user);
+          if (confirmation?.kind === 'barberia') void changeBarberiaStatus();
+        }}
+      />
     </div>
   );
 }

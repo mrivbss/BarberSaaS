@@ -17,6 +17,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
   ({ className, hover = false, padding = 'md', children, ...props }, ref) => (
     <div
       ref={ref}
+      data-ui-card=""
       className={cn(
         'rounded-xl border border-border/80 bg-surface shadow-premium',
         'transition-all duration-300 ease-out',

@@ -11,7 +11,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     const inputId = id || label?.toLowerCase().replace(/\s+/g, '-');
 
     return (
-      <div className="flex flex-col gap-1.5">
+      <div data-ui-field="" className="flex flex-col gap-1.5">
         {label && (
           <label
             htmlFor={inputId}
@@ -23,6 +23,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         <input
           ref={ref}
           id={inputId}
+          data-ui-input=""
           className={cn(
             'w-full h-10 rounded-lg border border-border bg-surface px-3',
             'text-sm text-foreground shadow-input placeholder:text-muted/60',

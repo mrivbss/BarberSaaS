@@ -13,6 +13,7 @@ interface EmptyStateProps {
 export function EmptyState({ icon: Icon, title, description, action, className }: EmptyStateProps) {
   return (
     <div
+      data-ui-empty-state=""
       className={cn(
         'flex flex-col items-center justify-center py-16 px-6 text-center',
         className

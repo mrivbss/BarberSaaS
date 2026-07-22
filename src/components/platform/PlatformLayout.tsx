@@ -1,18 +1,55 @@
-import { Building2, LogOut, Plus, Scissors, ShieldCheck } from 'lucide-react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import {
+  Activity,
+  Building2,
+  Command,
+  Gauge,
+  LogOut,
+  Plus,
+  Scissors,
+  ShieldCheck,
+  Sparkles,
+} from 'lucide-react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useCallback } from 'react';
 import { useAuth } from '../../auth/AuthContext';
-import { cn } from '../../lib/cn';
+import { PlatformCommandPalette } from './command/PlatformCommandPalette';
+import '../../styles/platform.css';
 
 const platformLinks = [
+  { to: '/platform', label: 'Mission Control', icon: Gauge },
   { to: '/platform/barberias', label: 'Barberías', icon: Building2 },
   { to: '/platform/barberias/nueva', label: 'Nueva barbería', icon: Plus },
 ] as const;
 
+function platformArea(pathname: string): string {
+  if (pathname === '/platform' || pathname === '/platform/') return 'Mission Control';
+  if (pathname === '/platform/barberias/nueva') return 'Nueva barbería';
+  if (pathname.endsWith('/editar')) return 'Editar barbería';
+  if (/^\/platform\/barberias\/[^/]+(?:\/usuarios)?$/.test(pathname)) {
+    return 'Detalle del tenant';
+  }
+  return 'Barberías';
+}
+
+function platformNavIndex(pathname: string): number {
+  if (pathname === '/platform' || pathname === '/platform/') return 0;
+  if (pathname === '/platform/barberias/nueva') return 2;
+  return 1;
+}
+
+function platformPageKey(pathname: string): string {
+  return pathname.replace(/\/usuarios$/, '');
+}
+
 export function PlatformLayout() {
+  const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
+  const activeNavIndex = platformNavIndex(location.pathname);
+  const profileName = profile?.nombre ?? 'Superadministrador';
+  const profileInitial = profileName.trim().charAt(0).toUpperCase() || 'S';
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     try {
       await signOut();
     } catch (error) {
@@ -20,81 +57,141 @@ export function PlatformLayout() {
     } finally {
       navigate('/login', { replace: true });
     }
-  };
+  }, [navigate, signOut]);
 
   return (
-    <div className="min-h-screen bg-[#f4f4f6] text-slate-900 lg:flex">
-      <aside className="relative border-b-2 border-slate-900 bg-slate-950 text-white lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:shrink-0 lg:border-b-0 lg:border-r-2">
-        <div className="flex items-center justify-between px-5 py-4 lg:block lg:px-6 lg:py-7">
-          <Link to="/platform/barberias" className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-slate-900 bg-amber-400 text-slate-950 shadow-[2px_2px_0px_0px_rgba(255,255,255,0.8)]">
-              <Scissors className="h-5 w-5" strokeWidth={2.5} />
+    <div className="platform-shell">
+      <a className="platform-skip-link" href="#platform-main-content">
+        Saltar al contenido principal
+      </a>
+      <aside className="platform-sidebar">
+        <div className="platform-sidebar__ambient" aria-hidden="true" />
+
+        <div className="platform-sidebar__topline">
+          <Link to="/platform" className="platform-brand" aria-label="BarberSaaS Plataforma">
+            <span className="platform-brand__mark" aria-hidden="true">
+              <span className="platform-brand__glow" />
+              <Scissors className="platform-brand__icon" strokeWidth={2.4} />
             </span>
-            <span>
-              <span className="block text-base font-black uppercase tracking-wide">BarberSaaS</span>
-              <span className="block text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">
-                Plataforma
-              </span>
+            <span className="platform-brand__copy">
+              <span className="platform-brand__name">BarberSaaS</span>
+              <span className="platform-brand__edition">Platform OS</span>
             </span>
           </Link>
 
-          <div className="hidden border-b border-white/15 pb-6 pt-8 lg:block">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
-              <ShieldCheck className="h-4 w-4 text-amber-300" />
-              Superadministrador
-            </div>
-            <p className="mt-1 truncate text-xs text-slate-400">
-              {profile?.nombre ?? profile?.email}
-            </p>
-          </div>
-
           <button
             type="button"
             onClick={() => void handleLogout()}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 text-slate-300 transition-colors hover:bg-white/10 hover:text-white lg:hidden"
+            className="platform-icon-button platform-sidebar__mobile-logout"
             aria-label="Cerrar sesión"
             title="Cerrar sesión"
           >
-            <LogOut className="h-4 w-4" />
+            <LogOut aria-hidden="true" />
           </button>
         </div>
 
-        <nav className="flex gap-2 overflow-x-auto px-4 pb-4 lg:flex-col lg:gap-1 lg:px-4 lg:py-6">
-          {platformLinks.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to.endsWith('barberias')}
-              className={({ isActive }) =>
-                cn(
-                  'flex shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition-colors',
-                  isActive
-                    ? 'bg-amber-400 text-slate-950'
-                    : 'text-slate-300 hover:bg-white/10 hover:text-white',
-                )
-              }
-            >
-              <Icon className="h-4 w-4" strokeWidth={2.25} />
-              {label}
-            </NavLink>
-          ))}
+        <div className="platform-environment" aria-label="Entorno de producción">
+          <span className="platform-environment__signal" aria-hidden="true" />
+          <span>Producción</span>
+          <span className="platform-environment__secure">
+            <ShieldCheck aria-hidden="true" />
+            Seguro
+          </span>
+        </div>
+
+        <div className="platform-operator">
+          <span className="platform-operator__avatar" aria-hidden="true">{profileInitial}</span>
+          <span className="platform-operator__copy">
+            <span className="platform-operator__role">Superadministrador</span>
+            <span className="platform-operator__name">{profileName}</span>
+          </span>
+          <Sparkles className="platform-operator__spark" aria-hidden="true" />
+        </div>
+
+        <div className="platform-nav-label">Navegación</div>
+        <nav
+          className={`platform-nav platform-nav--index-${activeNavIndex}`}
+          aria-label="Navegación de plataforma"
+        >
+          <span className="platform-nav__indicator" aria-hidden="true">
+            <span className="platform-nav__liquid" />
+          </span>
+
+          {platformLinks.map(({ to, label, icon: Icon }, index) => {
+            const isActive = index === activeNavIndex;
+            return (
+              <Link
+                key={to}
+                to={to}
+                aria-current={isActive ? 'page' : undefined}
+                className={`platform-nav__link${isActive ? ' is-active' : ''}`}
+              >
+                <span className="platform-nav__icon">
+                  <Icon aria-hidden="true" strokeWidth={isActive ? 2.25 : 1.8} />
+                </span>
+                <span>{label}</span>
+              </Link>
+            );
+          })}
         </nav>
 
-        <div className="absolute bottom-0 hidden w-64 border-t border-white/15 p-4 lg:block">
+        <div className="platform-sidebar__footer">
+          <div className="platform-sidebar__footer-rule" />
           <button
             type="button"
             onClick={() => void handleLogout()}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+            className="platform-logout-button"
           >
-            <LogOut className="h-4 w-4" />
-            Cerrar sesión
+            <span className="platform-logout-button__icon">
+              <LogOut aria-hidden="true" />
+            </span>
+            <span>
+              <span className="platform-logout-button__label">Cerrar sesión</span>
+              <span className="platform-logout-button__hint">Finalizar acceso seguro</span>
+            </span>
           </button>
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1">
-        <Outlet />
-      </main>
+      <div className="platform-workspace">
+        <header className="platform-header">
+          <div className="platform-header__identity">
+            <span className="platform-header__command" aria-hidden="true">
+              <Command />
+            </span>
+            <div>
+              <div className="platform-header__breadcrumb">
+                <span>Plataforma</span>
+                <span aria-hidden="true">/</span>
+                <strong>{platformArea(location.pathname)}</strong>
+              </div>
+              <p className="platform-header__title">Centro de control</p>
+            </div>
+          </div>
+
+          <div className="platform-header__status">
+            <PlatformCommandPalette onLogout={handleLogout} />
+            <span className="platform-system-status">
+              <Activity aria-hidden="true" />
+              <span className="platform-system-status__copy">
+                <strong>Sistema operativo</strong>
+                <span>Conexión protegida</span>
+              </span>
+            </span>
+            <span className="platform-header__avatar" title={profileName}>{profileInitial}</span>
+          </div>
+        </header>
+
+        <main id="platform-main-content" className="platform-stage" tabIndex={-1}>
+          <div className="platform-stage__aurora" aria-hidden="true" />
+          <div
+            key={platformPageKey(location.pathname)}
+            className="platform-stage__content platform-route-transition"
+          >
+            <Outlet />
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

@@ -13,6 +13,7 @@ interface PageHeaderProps {
 export function PageHeader({ title, subtitle, badge, action, className }: PageHeaderProps) {
   return (
     <header
+      data-ui-page-header=""
       className={cn(
         'mb-10 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between',
         className

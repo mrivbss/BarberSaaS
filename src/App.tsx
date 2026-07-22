@@ -1,3 +1,4 @@
+import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import type { UserRole } from './services/login';
@@ -9,19 +10,39 @@ import { Finanzas } from './views/Finanzas';
 import { PublicLandingPage } from './views/PublicLandingPage';
 import { SetPassword } from './views/SetPassword';
 import { Dashboard } from './views/Dashboard';
-import { PlatformLayout } from './components/platform/PlatformLayout';
-import {
-  PlatformBarberiaDetail,
-  PlatformBarberiaForm,
-  PlatformBarberias,
-} from './views/platform';
+
+const LazyPlatformLayout = lazy(() =>
+  import('./components/platform/PlatformLayout').then((module) => ({
+    default: module.PlatformLayout,
+  })),
+);
+const LazyPlatformMissionControl = lazy(() =>
+  import('./views/platform/PlatformMissionControl').then((module) => ({
+    default: module.PlatformMissionControl,
+  })),
+);
+const LazyPlatformBarberias = lazy(() =>
+  import('./views/platform/PlatformBarberias').then((module) => ({
+    default: module.PlatformBarberias,
+  })),
+);
+const LazyPlatformBarberiaForm = lazy(() =>
+  import('./views/platform/PlatformBarberiaForm').then((module) => ({
+    default: module.PlatformBarberiaForm,
+  })),
+);
+const LazyPlatformBarberiaDetail = lazy(() =>
+  import('./views/platform/PlatformBarberiaDetail').then((module) => ({
+    default: module.PlatformBarberiaDetail,
+  })),
+);
 
 const TENANT_ROLES: readonly UserRole[] = ['admin', 'barbero'];
 const ADMIN_ROLES: readonly UserRole[] = ['admin'];
 const PLATFORM_ROLES: readonly UserRole[] = ['superadmin'];
 
 function destinationForRole(role: UserRole): string {
-  return role === 'superadmin' ? '/platform/barberias' : '/dashboard';
+  return role === 'superadmin' ? '/platform' : '/dashboard';
 }
 
 function LoadingScreen() {
@@ -29,6 +50,20 @@ function LoadingScreen() {
     <div className="flex h-screen w-screen items-center justify-center bg-zinc-950 text-white">
       Cargando sistema...
     </div>
+  );
+}
+
+function PlatformRouteBoundary({ children }: { children: ReactNode }) {
+  return (
+    <Suspense
+      fallback={(
+        <div className="platform-page-loading" role="status" aria-live="polite">
+          <span className="sr-only">Cargando sección de Platform…</span>
+        </div>
+      )}
+    >
+      {children}
+    </Suspense>
   );
 }
 
@@ -84,13 +119,20 @@ export function App() {
       </Route>
 
       <Route element={<RequireRoles allowedRoles={PLATFORM_ROLES} />}>
-        <Route path="/platform" element={<PlatformLayout />}>
-          <Route index element={<Navigate to="barberias" replace />} />
-          <Route path="barberias" element={<PlatformBarberias />} />
-          <Route path="barberias/nueva" element={<PlatformBarberiaForm />} />
-          <Route path="barberias/:barberiaId" element={<PlatformBarberiaDetail />} />
-          <Route path="barberias/:barberiaId/editar" element={<PlatformBarberiaForm />} />
-          <Route path="barberias/:barberiaId/usuarios" element={<PlatformBarberiaDetail />} />
+        <Route
+          path="/platform"
+          element={(
+            <Suspense fallback={<LoadingScreen />}>
+              <LazyPlatformLayout />
+            </Suspense>
+          )}
+        >
+          <Route index element={<PlatformRouteBoundary><LazyPlatformMissionControl /></PlatformRouteBoundary>} />
+          <Route path="barberias" element={<PlatformRouteBoundary><LazyPlatformBarberias /></PlatformRouteBoundary>} />
+          <Route path="barberias/nueva" element={<PlatformRouteBoundary><LazyPlatformBarberiaForm /></PlatformRouteBoundary>} />
+          <Route path="barberias/:barberiaId" element={<PlatformRouteBoundary><LazyPlatformBarberiaDetail /></PlatformRouteBoundary>} />
+          <Route path="barberias/:barberiaId/editar" element={<PlatformRouteBoundary><LazyPlatformBarberiaForm /></PlatformRouteBoundary>} />
+          <Route path="barberias/:barberiaId/usuarios" element={<PlatformRouteBoundary><LazyPlatformBarberiaDetail /></PlatformRouteBoundary>} />
         </Route>
       </Route>
 

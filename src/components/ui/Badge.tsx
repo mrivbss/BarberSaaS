@@ -17,6 +17,7 @@ const variantStyles: Record<BadgeVariant, string> = {
 export function Badge({ className, variant = 'default', children, ...props }: BadgeProps) {
   return (
     <span
+      data-ui-badge=""
       className={cn(
         'inline-flex items-center rounded-full border border-transparent px-2.5 py-0.5 text-[11px] font-semibold leading-none tracking-wide',
         'transition-colors duration-200',
