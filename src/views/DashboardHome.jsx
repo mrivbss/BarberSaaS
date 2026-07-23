@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Calendar, DollarSign, Star, Clock } from 'lucide-react';
+import { useAuth } from '../auth/AuthContext';
 import { getDashboardStats, getUpcomingAppointments } from '../services/dashboard';
 import { PageTransition } from '../components/layout/PageTransition';
 import {
@@ -19,40 +20,83 @@ import {
   EmptyState,
 } from '../components/ui';
 
-export function DashboardHome({ usuario }) {
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function DashboardHome() {
+  const { loading: authLoading, session, profile } = useAuth();
+  const authUserId = session?.user?.id;
+  const profileId = profile?.id;
+  const barberiaId = profile?.barberia_id;
   const [stats, setStats] = useState({ citasHoy: 0, ingresosHoy: 0 });
   const [appointments, setAppointments] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
     document.title = 'Dashboard | BarberSaaS';
-    if (!usuario?.barberia_id) return;
+    if (authLoading) return;
+
+    const hasValidContext = (
+      UUID_PATTERN.test(authUserId || '')
+      && UUID_PATTERN.test(profileId || '')
+      && UUID_PATTERN.test(barberiaId || '')
+      && profileId === authUserId
+    );
+
+    if (!hasValidContext) {
+      if (import.meta.env.DEV) {
+        console.warn('Dashboard queries skipped: authenticated user or profile UUID is unavailable.', {
+          hasAuthenticatedUser: Boolean(session?.user),
+          authUserId: authUserId || null,
+          hasProfile: Boolean(profile),
+          profileId: profileId || null,
+          barberiaId: barberiaId || null,
+        });
+      }
+      setLoadingData(false);
+      return;
+    }
+
+    let active = true;
 
     const loadData = async () => {
       setLoadingData(true);
       try {
-        const fetchedStats = await getDashboardStats(usuario.barberia_id);
-        const fetchedAppointments = await getUpcomingAppointments(usuario.barberia_id);
+        const [fetchedStats, fetchedAppointments] = await Promise.all([
+          getDashboardStats(barberiaId, authUserId),
+          getUpcomingAppointments(barberiaId, authUserId),
+        ]);
 
-        setStats(fetchedStats || { citasHoy: 0, ingresosHoy: 0 });
-        setAppointments(fetchedAppointments || []);
+        if (active) {
+          setStats(fetchedStats || { citasHoy: 0, ingresosHoy: 0 });
+          setAppointments(fetchedAppointments || []);
+        }
       } catch (error) {
         console.error('Error cargando datos del dashboard:', error);
       } finally {
-        setLoadingData(false);
+        if (active) setLoadingData(false);
       }
     };
 
-    loadData();
-  }, [usuario]);
+    const handleFinancialUpdate = () => {
+      void loadData();
+    };
+
+    void loadData();
+    window.addEventListener('barbersaas:financials-updated', handleFinancialUpdate);
+
+    return () => {
+      active = false;
+      window.removeEventListener('barbersaas:financials-updated', handleFinancialUpdate);
+    };
+  }, [authLoading, session?.user, authUserId, profile, profileId, barberiaId]);
 
 
   return (
     <PageTransition className="p-8 lg:p-10 max-w-6xl mx-auto space-y-8">
       <PageHeader
         title="Dashboard"
-        subtitle={`Bienvenido, ${usuario?.email}`}
-        badge={<TenantBadge tenantId={usuario?.barberia_id} />}
+        subtitle={`Bienvenido, ${profile?.email || session?.user?.email || ''}`}
+        badge={<TenantBadge tenantId={barberiaId} />}
       />
 
       {/* KPI Grid */}

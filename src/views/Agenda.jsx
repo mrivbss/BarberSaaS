@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Loader2, Trash2, ChevronDown, ChevronLeft, ChevronRight, Calendar, Clock } from 'lucide-react';
-import { appointmentServices } from '../appointments/getAppointments';
+import { appointmentServices, CobroCitaError } from '../appointments/getAppointments';
 import { barberServices } from '../services/services';
 import { PageTransition } from '../components/layout/PageTransition';
 import {
@@ -100,7 +100,7 @@ export function Agenda() {
       setLoading(true);
       const [listaCitas, listaServicios] = await Promise.all([
         appointmentServices.getAll(sesion.barberia_id, agendaBarberoId),
-        barberServices.getAll(sesion.barberia_id)
+        barberServices.getAll(sesion.barberia_id, sesion.id)
       ]);
       
       setCitas(listaCitas);
@@ -168,7 +168,6 @@ export function Agenda() {
 
   const handleCobrar = async (cita) => {
     const precioServicio = cita.servicios?.precio || 0;
-    const nombreServicio = cita.servicios?.nombre || 'Servicio';
     
     if (precioServicio === 0) {
       alert("Esta cita no tiene un precio válido asignado en servicios.");
@@ -180,22 +179,40 @@ export function Agenda() {
 
     try {
       setActionLoading(cita.id);
-      
-      // ... dentro de handleCobrar, antes del await
       const sesion = JSON.parse(localStorage.getItem('tenant_session') || '{}');
 
-      await appointmentServices.cobrarCita(cita.id, {
-        monto: precioServicio,
-        barbero_id: cita.barbero_id || sesion?.id,
-        barberia_id: cita.barberia_id || sesion?.barberia_id,
-        concepto: `Cita: ${nombreServicio} - ${cita.cliente}`
-      });
-      
-      const actualizada = await appointmentServices.getAll(sesion.barberia_id, agendaBarberoId);
-      setCitas(actualizada);
+      await appointmentServices.cobrarCita(cita.id);
+      setCitas((current) => current.map((item) => (
+        item.id === cita.id ? { ...item, estado: 'cobrada' } : item
+      )));
+      window.dispatchEvent(new Event('barbersaas:financials-updated'));
+
+      try {
+        const actualizada = await appointmentServices.getAll(sesion.barberia_id, agendaBarberoId);
+        setCitas(actualizada);
+      } catch (refreshError) {
+        if (import.meta.env.DEV) {
+          console.error('Cobro confirmado, pero falló la recarga de citas:', refreshError);
+        }
+      }
     } catch (error) {
-      console.error("Error en flujo de cobro:", error);
-      alert("Falló el registro del cobro.");
+      if (import.meta.env.DEV) {
+        console.error('Error en flujo de cobro:', error);
+      }
+
+      const statusMessages = {
+        cita_ya_cobrada: 'Esta cita ya fue cobrada.',
+        cita_no_encontrada: 'La cita ya no está disponible.',
+        cita_no_pertenece_al_barbero: 'No puedes cobrar una cita de otro barbero.',
+        barbero_no_disponible: 'Tu perfil de barbero no está disponible para cobrar.',
+        servicio_invalido: 'El servicio de esta cita no es válido para el barbero.',
+        no_autenticado: 'Tu sesión ya no está disponible. Inicia sesión nuevamente.',
+      };
+      alert(
+        error instanceof CobroCitaError
+          ? statusMessages[error.status] || 'Falló el registro del cobro.'
+          : 'Falló el registro del cobro.',
+      );
     } finally {
       setActionLoading(null);
     }
@@ -466,7 +483,7 @@ export function Agenda() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {c.estado === 'completada' ? (
+                        {c.estado === 'cobrada' || c.estado === 'completada' ? (
                           <div className="inline-flex items-center px-2 py-0.5 rounded-md font-mono text-xs font-bold bg-emerald-300 text-slate-950 border border-slate-900 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                             Cobrada
                           </div>

@@ -38,7 +38,7 @@ const LazyPlatformBarberiaDetail = lazy(() =>
 );
 
 const TENANT_ROLES: readonly UserRole[] = ['admin', 'barbero'];
-const ADMIN_ROLES: readonly UserRole[] = ['admin'];
+const BARBER_ROLES: readonly UserRole[] = ['barbero'];
 const PLATFORM_ROLES: readonly UserRole[] = ['superadmin'];
 
 function destinationForRole(role: UserRole): string {
@@ -86,8 +86,7 @@ function LoginRoute() {
 }
 
 function DashboardHomeRoute() {
-  const { profile } = useAuth();
-  return profile ? <DashboardHome usuario={profile} /> : null;
+  return <DashboardHome />;
 }
 
 function RootRedirect() {
@@ -111,7 +110,7 @@ export function App() {
         <Route path="/dashboard" element={<Dashboard />}>
           <Route index element={<DashboardHomeRoute />} />
           <Route path="agenda" element={<Agenda />} />
-          <Route element={<RequireRoles allowedRoles={ADMIN_ROLES} />}>
+          <Route element={<RequireRoles allowedRoles={BARBER_ROLES} />}>
             <Route path="servicios" element={<Servicios />} />
             <Route path="finanzas" element={<Finanzas />} />
           </Route>

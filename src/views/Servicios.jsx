@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Loader2, Plus, Trash2, Edit } from 'lucide-react';
+import { useAuth } from '../auth/AuthContext';
 import { barberServices } from '../services/services';
 import { PageTransition } from '../components/layout/PageTransition';
 import {
@@ -18,34 +19,59 @@ import {
 } from '../components/ui';
 
 export function Servicios() {
-  const sesion = JSON.parse(localStorage.getItem('tenant_session') || '{}');
-  const barberiaId = sesion?.barberia_id;
+  const { profile } = useAuth();
+  const barberiaId = profile?.barberia_id;
+  const barberoId = profile?.id;
   const [servicios, setServicios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
   const [nombre, setNombre] = useState('');
   const [precio, setPrecio] = useState('');
   const [duracion, setDuracion] = useState('30');
 
+  const fetchServicios = async () => {
+    if (!barberiaId || !barberoId) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const data = await barberServices.getAll(barberiaId, barberoId);
+      setServicios(data);
+    } catch (error) {
+      console.error('Error al cargar:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     document.title = 'Servicios | BarberSaaS';
     fetchServicios();
-  }, []);
+  }, [barberiaId, barberoId]);
 
-  const fetchServicios = async () => {
-  if (!barberiaId) return; // Asegura que exista el ID
-  try {
-    setLoading(true);
-    const data = await barberServices.getAll(barberiaId); // PASA EL ID AQUÍ
-    setServicios(data);
-  } catch (error) {
-    console.error('Error al cargar:', error);
-  } finally {
-    setLoading(false);
-  }
-};
+  const resetForm = () => {
+    setNombre('');
+    setPrecio('');
+    setDuracion('30');
+    setEditingId(null);
+  };
+
+  const handleToggleNuevo = () => {
+    if (showForm) {
+      resetForm();
+      setShowForm(false);
+      return;
+    }
+
+    resetForm();
+    setShowForm(true);
+  };
 
   const handleGuardarServicio = async (e) => {
     e.preventDefault();
@@ -54,27 +80,80 @@ export function Servicios() {
       return;
     }
 
-    try {
-    setSaving(true);
-    const nuevo = await barberServices.create({
-      nombre,
-      precio: parseFloat(precio),
-      duracion: parseInt(duracion, 10),
-      barberia_id: barberiaId
-    });
+    if (!barberiaId || !barberoId) {
+      alert('No se pudo identificar al barbero autenticado. Recarga la página.');
+      return;
+    }
 
-      if (nuevo) {
-        setServicios([nuevo, ...servicios]);
+    try {
+      setSaving(true);
+      const values = {
+        nombre: nombre.trim(),
+        precio: parseFloat(precio),
+        duracion: parseInt(duracion, 10),
+      };
+
+      if (editingId !== null) {
+        const actualizado = await barberServices.update(
+          editingId,
+          barberiaId,
+          barberoId,
+          values,
+        );
+        setServicios((current) => current.map((servicio) => (
+          servicio.id === editingId ? actualizado : servicio
+        )));
+      } else {
+        const nuevo = await barberServices.create({
+          ...values,
+          barberia_id: barberiaId,
+          barbero_id: barberoId,
+        });
+
+        if (nuevo) {
+          setServicios((current) => [nuevo, ...current]);
+        }
       }
 
-      setNombre('');
-      setPrecio('');
-      setDuracion('30');
+      resetForm();
+      setShowForm(false);
     } catch (error) {
       console.error('Error al guardar:', error);
       alert('Error al guardar el servicio');
+    } finally {
       setSaving(false);
-      setShowForm(false);
+    }
+  };
+
+  const handleEditar = (servicio) => {
+    setEditingId(servicio.id);
+    setNombre(servicio.nombre);
+    setPrecio(String(servicio.precio));
+    setDuracion(String(servicio.duracion));
+    setShowForm(true);
+  };
+
+  const handleEliminar = async (servicio) => {
+    if (!barberiaId || !barberoId) {
+      alert('No se pudo identificar al barbero autenticado. Recarga la página.');
+      return;
+    }
+
+    if (!window.confirm(`¿Eliminar el servicio "${servicio.nombre}"?`)) return;
+
+    try {
+      setDeletingId(servicio.id);
+      await barberServices.remove(servicio.id, barberiaId, barberoId);
+      setServicios((current) => current.filter((item) => item.id !== servicio.id));
+      if (editingId === servicio.id) {
+        resetForm();
+        setShowForm(false);
+      }
+    } catch (error) {
+      console.error('Error al eliminar:', error);
+      alert('Error al eliminar el servicio');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -83,10 +162,11 @@ export function Servicios() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <PageHeader
           title="Servicios"
-          subtitle="Gestiona el catálogo de servicios de la barbería."
+          subtitle="Gestiona tus propios servicios."
         />
         <button
-          onClick={() => setShowForm(!showForm)}
+          type="button"
+          onClick={handleToggleNuevo}
           className="bg-amber-400 text-slate-950 font-black border-2 border-slate-900 rounded-xl px-5 py-2.5 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)] hover:bg-amber-300 active:translate-y-0.5 transition-all flex items-center gap-2 w-fit"
         >
           <Plus className="h-5 w-5" strokeWidth={2.5} />
@@ -96,7 +176,9 @@ export function Servicios() {
 
       {showForm && (
         <div className="bg-white border-2 border-slate-900 rounded-xl shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] p-6 mb-8 animate-in slide-in-from-top-4 fade-in duration-200">
-          <SectionTitle className="mb-5 text-slate-900">Agregar Nuevo Servicio</SectionTitle>
+          <SectionTitle className="mb-5 text-slate-900">
+            {editingId !== null ? 'Editar Servicio' : 'Agregar Nuevo Servicio'}
+          </SectionTitle>
           <form onSubmit={handleGuardarServicio} className="space-y-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700">NOMBRE DEL SERVICIO</label>
@@ -140,7 +222,7 @@ export function Servicios() {
               disabled={saving} 
               className="bg-emerald-300 hover:bg-emerald-400 text-slate-950 font-black uppercase tracking-wider border-2 border-slate-900 rounded-lg py-3 w-full shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-y-0.5 transition-all flex justify-center items-center mt-2 disabled:opacity-50"
             >
-              {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Guardar Servicio'}
+              {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : editingId !== null ? 'Actualizar Servicio' : 'Guardar Servicio'}
             </button>
           </form>
         </div>
@@ -172,11 +254,24 @@ export function Servicios() {
                   ${servicio.precio.toLocaleString('es-CL')}
                 </span>
                 <div className="flex gap-2">
-                  <button className="border-2 border-slate-900 rounded-lg p-2 hover:bg-amber-300 transition-colors bg-white">
+                  <button
+                    type="button"
+                    onClick={() => handleEditar(servicio)}
+                    className="border-2 border-slate-900 rounded-lg p-2 hover:bg-amber-300 transition-colors bg-white"
+                    aria-label={`Editar ${servicio.nombre}`}
+                  >
                     <Edit className="h-4 w-4 text-slate-900" strokeWidth={2.5} />
                   </button>
-                  <button className="border-2 border-slate-900 rounded-lg p-2 hover:bg-red-400 transition-colors bg-white">
-                    <Trash2 className="h-4 w-4 text-slate-900" strokeWidth={2.5} />
+                  <button
+                    type="button"
+                    onClick={() => handleEliminar(servicio)}
+                    disabled={deletingId === servicio.id}
+                    className="border-2 border-slate-900 rounded-lg p-2 hover:bg-red-400 transition-colors bg-white disabled:opacity-50"
+                    aria-label={`Eliminar ${servicio.nombre}`}
+                  >
+                    {deletingId === servicio.id
+                      ? <Loader2 className="h-4 w-4 animate-spin text-slate-900" />
+                      : <Trash2 className="h-4 w-4 text-slate-900" strokeWidth={2.5} />}
                   </button>
                 </div>
               </div>

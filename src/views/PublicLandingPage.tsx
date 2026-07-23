@@ -15,16 +15,26 @@ interface BarberoPublico {
 }
 
 interface ServicioPublico {
+  servicio_id: number;
+  servicio_nombre: string;
+  precio: number;
+  duracion: number;
+  barbero_id: string | null;
+  barbero_nombre: string | null;
+}
+
+interface ServicioPortalPublico {
   id: number;
   nombre: string;
   precio: number;
+  duracion: number;
 }
 
 interface PortalPublicoResponse {
   status: string;
   barberia?: BarberiaPublica;
   barbero?: BarberoPublico | null;
-  servicios?: ServicioPublico[];
+  servicios?: ServicioPortalPublico[];
 }
 
 interface CitaPublicaResponse {
@@ -116,6 +126,8 @@ export function PublicLandingPage() {
       setBarberia(null);
       setBarbero(null);
       setServicios([]);
+      setServicioSeleccionado(null);
+      setShowServices(false);
 
       if (!barberiaSlug) {
         setError('Barbería no encontrada.');
@@ -158,14 +170,55 @@ export function PublicLandingPage() {
           return;
         }
 
-        if (portal.status !== 'ok' || !portal.barberia || !Array.isArray(portal.servicios)) {
+        if (portal.status !== 'ok' || !portal.barberia) {
           setError('No se pudo cargar el portal de reservas.');
           return;
         }
 
+        let serviciosDisponibles: ServicioPublico[];
+
+        if (barberoSlug) {
+          const { data: serviciosBarbero, error: serviciosBarberoError } = await supabase.rpc(
+            'obtener_servicios_publicos_barbero',
+            {
+              p_barberia_slug: barberiaSlug,
+              p_barbero_slug: barberoSlug,
+            },
+          );
+
+          if (!active) return;
+
+          if (serviciosBarberoError) {
+            console.error('Error al cargar los servicios del barbero:', serviciosBarberoError);
+            setError('No se pudieron cargar los servicios del barbero.');
+            return;
+          }
+
+          if (!Array.isArray(serviciosBarbero)) {
+            setError('No se pudieron cargar los servicios del barbero.');
+            return;
+          }
+
+          serviciosDisponibles = serviciosBarbero as ServicioPublico[];
+        } else {
+          if (!Array.isArray(portal.servicios)) {
+            setError('No se pudo cargar el portal de reservas.');
+            return;
+          }
+
+          serviciosDisponibles = portal.servicios.map((servicio) => ({
+            servicio_id: servicio.id,
+            servicio_nombre: servicio.nombre,
+            precio: servicio.precio,
+            duracion: servicio.duracion,
+            barbero_id: null,
+            barbero_nombre: null,
+          }));
+        }
+
         setBarberia(portal.barberia);
         setBarbero(portal.barbero || null);
-        setServicios(portal.servicios);
+        setServicios(serviciosDisponibles);
       } catch (loadError) {
         console.error('Error al cargar el portal público:', loadError);
         if (active) {
@@ -205,7 +258,7 @@ export function PublicLandingPage() {
       const { data, error: insertError } = await supabase.rpc('crear_cita_publica', {
         p_barberia_slug: barberiaSlug,
         p_barbero_slug: barberoSlug || null,
-        p_servicio_id: servicioSeleccionado.id,
+        p_servicio_id: servicioSeleccionado.servicio_id,
         p_cliente: clienteNombre,
         p_fecha: fecha,
         p_hora: hora.includes(':') && hora.split(':').length === 2 ? `${hora}:00` : hora,
@@ -283,6 +336,11 @@ export function PublicLandingPage() {
         <div className="border-2 border-slate-900 rounded-xl p-6 bg-white shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
           <h2 className="text-2xl font-black uppercase tracking-tight mb-4">Reserva tu Cita</h2>
 
+          {barberoSlug && servicios.length === 0 ? (
+            <p className="rounded-lg border-2 border-slate-300 bg-slate-50 p-4 text-sm font-bold text-slate-600">
+              Este barbero todavía no tiene servicios disponibles para reservar.
+            </p>
+          ) : (
           <form onSubmit={handleReservar} className="space-y-4">
             
             {/* Nombre */}
@@ -308,7 +366,7 @@ export function PublicLandingPage() {
                   className="w-full border-2 border-slate-900 rounded-lg bg-slate-50 px-3 py-2 text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer flex justify-between items-center text-left"
                 >
                   <span className="truncate">
-                    {servicioSeleccionado ? `${servicioSeleccionado.nombre} ($${servicioSeleccionado.precio.toLocaleString('es-CL')})` : 'Selecciona...'}
+                    {servicioSeleccionado ? `${servicioSeleccionado.servicio_nombre} ($${servicioSeleccionado.precio.toLocaleString('es-CL')})` : 'Selecciona...'}
                   </span>
                   <ChevronDown className={`h-4 w-4 text-slate-700 transition-transform duration-200 shrink-0 ${showServices ? 'rotate-180' : ''}`} />
                 </button>
@@ -328,14 +386,14 @@ export function PublicLandingPage() {
                       </div>
                       {servicios.map((s) => (
                         <div
-                          key={s.id}
+                          key={s.servicio_id}
                           onClick={() => {
                             setServicioSeleccionado(s);
                             setShowServices(false);
                           }}
                           className="px-4 py-2 text-sm font-bold text-slate-900 hover:bg-amber-400 cursor-pointer transition-colors border-b last:border-b-0 border-slate-100"
                         >
-                          {s.nombre} (${s.precio.toLocaleString('es-CL')})
+                          {s.servicio_nombre} (${s.precio.toLocaleString('es-CL')})
                         </div>
                       ))}
                     </div>
@@ -476,6 +534,7 @@ export function PublicLandingPage() {
               {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Confirmar Reserva'}
             </button>
           </form>
+          )}
         </div>
       </div>
     </div>

@@ -9,6 +9,26 @@ export interface CitaInput {
   servicio_id: number;
 }
 
+interface CobroCitaResponse {
+  status: string;
+  cita_id?: string;
+  ganancia_id?: string;
+  monto?: number;
+  estado?: string;
+  ganancia?: Record<string, unknown>;
+  cita?: Record<string, unknown>;
+}
+
+export class CobroCitaError extends Error {
+  readonly status: string;
+
+  constructor(status: string) {
+    super(status);
+    this.name = 'CobroCitaError';
+    this.status = status;
+  }
+}
+
 export const appointmentServices = {
   // Ahora recibe barberiaId como parámetro
   async getAll(barberiaId: string, barberoId?: string) {
@@ -45,26 +65,27 @@ export const appointmentServices = {
     return data?.[0] || null;
   },
 
-  async cobrarCita(
-    citaId: string, 
-    datosGanancia: { monto: number; barbero_id: string; barberia_id: string; concepto: string }
-  ) {
-    // 1. Actualizar estado de la cita
-    const updateCita = await supabase
-      .from('citas')
-      .update({ estado: 'completada' })
-      .eq('id', citaId);
+  async cobrarCita(citaId: string): Promise<CobroCitaResponse> {
+    const { data, error } = await supabase.rpc('cobrar_cita_barbero', {
+      p_cita_id: citaId,
+    });
 
-    if (updateCita.error) throw updateCita.error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('Supabase cobrar_cita_barbero error:', error);
+      }
+      throw error;
+    }
 
-    // 2. Registrar el movimiento en ganancias
-    const insertGanancia = await supabase
-      .from('ganancias')
-      .insert([datosGanancia]);
+    const result = data as unknown as CobroCitaResponse | null;
+    if (!result || result.status !== 'ok') {
+      if (import.meta.env.DEV) {
+        console.error('Supabase cobrar_cita_barbero rejected:', result);
+      }
+      throw new CobroCitaError(result?.status || 'respuesta_invalida');
+    }
 
-    if (insertGanancia.error) throw insertGanancia.error;
-
-    return true;
+    return result;
   },
 
   async deleteCita(citaId: string, barberiaId: string) {

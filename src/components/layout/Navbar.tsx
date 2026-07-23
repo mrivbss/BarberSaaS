@@ -13,8 +13,8 @@ interface NavItem {
 const navItems: readonly NavItem[] = [
   { to: '/dashboard', end: true, label: 'DASHBOARD', roles: ['admin', 'barbero'] },
   { to: '/dashboard/agenda', label: 'AGENDA', roles: ['admin', 'barbero'] },
-  { to: '/dashboard/servicios', label: 'SERVICIOS', roles: ['admin'] },
-  { to: '/dashboard/finanzas', label: 'FINANZAS', roles: ['admin'] },
+  { to: '/dashboard/servicios', label: 'SERVICIOS', roles: ['barbero'] },
+  { to: '/dashboard/finanzas', label: 'FINANZAS', roles: ['barbero'] },
 ];
 
 interface NavbarProps {

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { DollarSign, Receipt, ArrowUpRight } from 'lucide-react';
+import { useAuth } from '../auth/AuthContext';
 import { financeServices } from '../services/finances';
 import { PageTransition } from '../components/layout/PageTransition';
 import {
@@ -16,31 +17,35 @@ import {
 } from '../components/ui';
 
 export function Finanzas() {
+  const { profile } = useAuth();
+  const barberiaId = profile?.barberia_id;
+  const barberoId = profile?.id;
   const [ganancias, setGanancias] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchFinanzas = async () => {
+    if (!barberiaId || !barberoId) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const data = await financeServices.getAll(barberiaId, barberoId);
+      setGanancias(data);
+    } catch (error) {
+      console.error('Error al cargar finanzas:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     document.title = 'Finanzas | BarberSaaS';
-    fetchFinanzas();
-  }, []);
+    void fetchFinanzas();
+  }, [barberiaId, barberoId]);
 
-  // En Finanzas.jsx
-const sesion = JSON.parse(localStorage.getItem('tenant_session') || '{}');
-
-const fetchFinanzas = async () => {
-  try {
-    setLoading(true);
-    // Pasamos el ID de la sesión
-    const data = await financeServices.getAll(sesion.barberia_id); 
-    setGanancias(data);
-  } catch (error) {
-    console.error("Error al cargar finanzas:", error);
-  } finally {
-    setLoading(false);
-  }
-};
-
-  const totalIngresos = ganancias.reduce((sum, item) => sum + (item.monto || 0), 0);
+  const totalIngresos = ganancias.reduce((sum, item) => sum + Number(item.monto || 0), 0);
   const totalCortes = ganancias.length;
 
   return (
